@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose*.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+
+# Data directories (mounted as volumes)
+data/
+uploads/
+instance/
+exports/
+auto-process/
+
+# Non-runtime directories
+.cache/
+node_modules/
+temp/
+docs/
+site/
+plan/
+unraid/
+tests/
+.claude/
+.migrate/
+.github/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and misc
+*.log
+*.md
+!requirements*.txt
+LICENSE
+CLAUDE.md

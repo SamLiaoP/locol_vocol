@@ -1,0 +1,30 @@
+<!-- Duplicates List Modal (design system v1) -->
+<div v-if="showDuplicatesModal && duplicatesModalData" @click.self="showDuplicatesModal = false" class="modal-overlay">
+    <div class="modal-panel modal-panel--xs">
+        <div class="modal-header">
+            <i class="fas fa-copy text-2xl" style="color: var(--tint-warn-fg);"></i>
+            <h3 class="modal-title">${ duplicatesModalData.total_copies } ${ t('upload.copies') || 'copies' }</h3>
+            <button @click="showDuplicatesModal = false" class="modal-close" :title="t('buttons.close')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding: var(--sp-2);">
+            <div class="space-y-1">
+                <button v-for="copy in duplicatesModalData.copies" :key="copy.id"
+                        @click="navigateToDuplicate(copy.id)"
+                        class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors"
+                        :class="copy.is_self ? 'bg-[var(--bg-accent)]' : 'hover:bg-[var(--bg-tertiary)]'">
+                    <i class="fas fa-file-audio text-sm flex-shrink-0"
+                       :class="copy.is_self ? 'text-[var(--text-accent)]' : 'text-[var(--text-muted)]'"></i>
+                    <div class="min-w-0 flex-1">
+                        <div class="t-body-strong truncate"
+                             :class="copy.is_self ? 'text-[var(--text-accent)]' : ''">
+                            ${ copy.title }
+                            <span v-if="copy.is_self" class="t-meta ml-1">(current)</span>
+                        </div>
+                        <div class="t-meta">${ formatDisplayDate(copy.created_at) }</div>
+                    </div>
+                    <i v-if="!copy.is_self" class="fas fa-chevron-right text-xs text-[var(--text-muted)]"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

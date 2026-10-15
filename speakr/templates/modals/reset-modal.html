@@ -1,0 +1,17 @@
+<!-- Reset Status Confirmation Modal (design system v1) -->
+<div v-if="showResetModal" @click.self="cancelReset" class="modal-overlay">
+    <div class="modal-panel modal-panel--sm">
+        <div class="modal-header">
+            <i class="fas fa-exclamation-triangle text-2xl" style="color: #f97316;"></i>
+            <h3 class="modal-title" v-text="t('modal.resetStatus')"></h3>
+            <button @click="cancelReset" class="modal-close" :title="t('buttons.close')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <p class="t-meta">${ t('modal.resetStatusBody') }</p>
+        </div>
+        <div class="modal-footer">
+            <button @click="cancelReset" class="btn btn--ghost">${ t('buttons.cancel') }</button>
+            <button @click="executeReset" class="btn btn--primary" style="background: #f97316; border-color: #f97316;">${ t('modal.resetStatusConfirm') }</button>
+        </div>
+    </div>
+</div>

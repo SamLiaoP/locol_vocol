@@ -1,0 +1,45 @@
+<!-- Color Scheme Modal (design system v1) -->
+<div v-if="showColorSchemeModal" @click.self="closeColorSchemeModal" class="modal-overlay">
+    <div class="modal-panel modal-panel--lg">
+        <div class="modal-header">
+            <i class="fas fa-palette text-xl text-[var(--text-accent)]"></i>
+            <div class="flex-1">
+                <h3 class="modal-title" v-text="t('colorScheme.title')"></h3>
+                <div class="modal-subtitle" v-text="t('colorScheme.subtitle')"></div>
+            </div>
+            <button @click="closeColorSchemeModal" class="modal-close" :title="t('buttons.close')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="color-scheme-section">
+                <h3 class="t-label flex items-center gap-2" style="margin-bottom: var(--sp-3);">
+                    <i :class="isDarkMode ? 'fas fa-moon' : 'fas fa-sun'"></i>
+                    <span v-text="isDarkMode ? t('colorScheme.darkThemes') : t('colorScheme.lightThemes')"></span>
+                </h3>
+                <div class="color-scheme-grid">
+                    <div v-for="scheme in colorSchemes[isDarkMode ? 'dark' : 'light']"
+                         :key="scheme.id"
+                         @click="selectColorScheme(scheme.id)"
+                         :class="['color-scheme-option', currentColorScheme === scheme.id ? 'active' : '']">
+                        <div class="color-scheme-preview">
+                            <div :class="`preview-${isDarkMode ? 'dark-' : ''}${scheme.id}-primary color-scheme-preview-segment`"></div>
+                            <div :class="`preview-${isDarkMode ? 'dark-' : ''}${scheme.id}-secondary color-scheme-preview-segment`"></div>
+                            <div :class="`preview-${isDarkMode ? 'dark-' : ''}${scheme.id}-tertiary color-scheme-preview-segment`"></div>
+                        </div>
+                        <div class="color-scheme-name" v-text="t('colorScheme.themes.' + (isDarkMode ? 'dark' : 'light') + '.' + scheme.id + '.name')"></div>
+                        <div class="color-scheme-description" v-text="t('colorScheme.themes.' + (isDarkMode ? 'dark' : 'light') + '.' + scheme.id + '.description')"></div>
+                        <div v-if="currentColorScheme === scheme.id" class="color-scheme-check">
+                            <i class="fas fa-check"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer modal-footer--between">
+            <button @click="resetColorScheme" class="btn btn--ghost">
+                <i class="fas fa-undo"></i>
+                <span v-text="t('colorScheme.resetToDefault')"></span>
+            </button>
+            <button @click="closeColorSchemeModal" class="btn btn--primary" v-text="t('common.close')"></button>
+        </div>
+    </div>
+</div>

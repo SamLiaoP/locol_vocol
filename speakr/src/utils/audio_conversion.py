@@ -1,0 +1,428 @@
+"""
+Audio conversion utility for handling codec detection and file conversion.
+
+This module provides a single, unified interface for handling ALL audio/video
+conversion needs:
+- Video to audio extraction
+- Unsupported codec conversion
+- Lossless audio compression
+
+Callers should ONLY use convert_if_needed() - it handles everything.
+"""
+
+import os
+import logging
+from pathlib import Path
+from typing import Optional, Tuple, Set, Dict, Any
+
+from src.utils.ffprobe import get_codec_info, is_lossless_audio, FFProbeError
+from src.utils.ffmpeg_utils import compress_audio, extract_audio_from_video, FFmpegError, FFmpegNotFoundError
+from src.config.app_config import AUDIO_COMPRESS_UPLOADS, AUDIO_CODEC, AUDIO_BITRATE, AUDIO_UNSUPPORTED_CODECS
+
+logger = logging.getLogger(__name__)
+
+
+class ConversionResult:
+    """Result of a conversion operation."""
+
+    def __init__(
+        self,
+        output_path: str,
+        mime_type: str,
+        was_converted: bool,
+        was_compressed: bool,
+        original_size: int,
+        final_size: int,
+        original_codec: Optional[str] = None,
+        final_codec: Optional[str] = None
+    ):
+        self.output_path = output_path
+        self.mime_type = mime_type
+        self.was_converted = was_converted
+        self.was_compressed = was_compressed
+        self.original_size = original_size
+        self.final_size = final_size
+        self.original_codec = original_codec
+        self.final_codec = final_codec
+
+    @property
+    def size_reduction_percent(self) -> float:
+        """Calculate size reduction percentage."""
+        if self.original_size == 0:
+            return 0.0
+        return ((self.original_size - self.final_size) / self.original_size) * 100
+
+    @property
+    def original_size_mb(self) -> float:
+        """Original size in megabytes."""
+        return self.original_size / (1024 * 1024)
+
+    @property
+    def final_size_mb(self) -> float:
+        """Final size in megabytes."""
+        return self.final_size / (1024 * 1024)
+
+
+def get_supported_codecs(needs_chunking: bool = False, connector_specs: Optional[Any] = None) -> Set[str]:
+    """
+    Get the set of supported audio codecs.
+
+    Args:
+        needs_chunking: If True, return only codecs that work well with chunking
+        connector_specs: Optional ConnectorSpecifications with provider-specific codec restrictions
+
+    Returns:
+        Set of supported codec names (minus any excluded via env var or connector specs)
+    """
+    # If connector defines explicit supported codecs, use those
+    if connector_specs and connector_specs.supported_codecs:
+        base_codecs = set(connector_specs.supported_codecs)
+    elif needs_chunking:
+        # For chunking: only support codecs that work well with chunking
+        base_codecs = {'pcm_s16le', 'pcm_s24le', 'pcm_f32le', 'mp3', 'flac'}
+    else:
+        # For direct transcription: support common formats
+        # Note: WebM containers are handled separately (by extension check in convert_if_needed)
+        # because MediaRecorder WebM files often lack seek cues, but the opus/vorbis codecs
+        # themselves are fine in proper containers (.opus, .ogg)
+        base_codecs = {'pcm_s16le', 'pcm_s24le', 'pcm_f32le', 'mp3', 'flac', 'aac', 'opus', 'vorbis'}
+
+    # Remove connector-specific unsupported codecs
+    if connector_specs and connector_specs.unsupported_codecs:
+        excluded = base_codecs & set(connector_specs.unsupported_codecs)
+        if excluded:
+            logger.info(f"Excluding codecs from supported list (via connector specs): {excluded}")
+        base_codecs = base_codecs - set(connector_specs.unsupported_codecs)
+
+    # Remove any global user-specified unsupported codecs (env var still applies)
+    if AUDIO_UNSUPPORTED_CODECS:
+        excluded = base_codecs & AUDIO_UNSUPPORTED_CODECS
+        if excluded:
+            logger.info(f"Excluding codecs from supported list (via AUDIO_UNSUPPORTED_CODECS): {excluded}")
+        return base_codecs - AUDIO_UNSUPPORTED_CODECS
+
+    return base_codecs
+
+
+def convert_if_needed(
+    filepath: str,
+    original_filename: Optional[str] = None,
+    codec_info: Optional[Dict[str, Any]] = None,
+    needs_chunking: bool = False,
+    is_asr_endpoint: bool = False,
+    delete_original: bool = True,
+    connector_specs: Optional[Any] = None
+) -> ConversionResult:
+    """
+    Handle ALL audio conversion needs in one place.
+
+    This is the ONLY function callers should use. It handles:
+    1. Video to audio extraction (if has_video)
+    2. Unsupported codec conversion (if codec not supported)
+    3. Lossless audio compression (if AUDIO_COMPRESS_UPLOADS enabled)
+
+    The function makes intelligent decisions about what processing is needed
+    and performs it in the optimal order.
+
+    Args:
+        filepath: Path to the audio/video file
+        original_filename: Original filename for logging (defaults to basename)
+        codec_info: Optional pre-fetched codec info to avoid redundant probe calls
+        needs_chunking: Whether chunking will be used (affects supported codecs)
+        is_asr_endpoint: Whether using ASR endpoint (affects AAC handling)
+        delete_original: Whether to delete original file after successful conversion
+        connector_specs: Optional ConnectorSpecifications with provider-specific codec restrictions
+
+    Returns:
+        ConversionResult with output path, mime type, and conversion stats
+
+    Raises:
+        FFmpegNotFoundError: If FFmpeg is not available
+        FFmpegError: If conversion fails
+    """
+    if original_filename is None:
+        original_filename = os.path.basename(filepath)
+
+    # Get original file size
+    original_size = os.path.getsize(filepath)
+
+    # Probe if codec info not provided
+    if codec_info is None:
+        try:
+            codec_info = get_codec_info(filepath, timeout=10)
+            logger.info(
+                f"Detected codec for {original_filename}: "
+                f"audio_codec={codec_info.get('audio_codec')}, "
+                f"has_video={codec_info.get('has_video', False)}"
+            )
+        except FFProbeError as e:
+            logger.warning(f"Failed to probe {filepath}: {e}. Will attempt conversion.")
+            codec_info = None
+
+    original_codec = codec_info.get('audio_codec') if codec_info else None
+    audio_codec = original_codec
+    has_video = codec_info.get('has_video', False) if codec_info else False
+
+    # Get supported codecs based on processing mode and connector specs
+    supported_codecs = get_supported_codecs(needs_chunking, connector_specs)
+
+    # Handle video files - extract audio
+    if has_video:
+        # Determine target codec for video extraction - fall back to mp3 if AUDIO_CODEC is unsupported
+        video_target_codec = AUDIO_CODEC
+        if connector_specs and connector_specs.unsupported_codecs:
+            if AUDIO_CODEC in connector_specs.unsupported_codecs:
+                video_target_codec = 'mp3'
+                logger.warning(
+                    f"AUDIO_CODEC '{AUDIO_CODEC}' is not supported by connector, "
+                    f"falling back to mp3 for video extraction from {original_filename}"
+                )
+
+        # Check if we can remux (copy) instead of transcode
+        can_remux = False
+        if audio_codec and audio_codec in supported_codecs:
+            try:
+                # Remux if audio is lossy, or if lossless but compression is disabled
+                is_lossless = is_lossless_audio(filepath, codec_info=codec_info)
+                can_remux = not is_lossless or not AUDIO_COMPRESS_UPLOADS
+            except Exception as e:
+                logger.warning(f"Could not determine if audio is lossless: {e}. Will transcode.")
+
+        try:
+            if can_remux:
+                logger.info(f"Extracting audio from video (remux, no transcoding): {original_filename}")
+                output_filepath, mime_type = extract_audio_from_video(
+                    filepath,
+                    output_format='copy',
+                    cleanup_original=delete_original,
+                    copy_stream=True
+                )
+                final_codec = audio_codec
+            else:
+                logger.info(f"Extracting and converting audio from video to {video_target_codec.upper()}: {original_filename}")
+                output_filepath, mime_type = extract_audio_from_video(
+                    filepath,
+                    output_format=video_target_codec,
+                    bitrate=AUDIO_BITRATE,
+                    cleanup_original=delete_original,
+                    copy_stream=False
+                )
+                final_codec = video_target_codec
+
+            final_size = os.path.getsize(output_filepath)
+            reduction = ((original_size - final_size) / original_size * 100) if original_size > 0 else 0
+
+            logger.info(
+                f"Successfully extracted audio from {original_filename}: "
+                f"{original_size/1024/1024:.1f}MB -> {final_size/1024/1024:.1f}MB "
+                f"({reduction:.1f}% reduction)"
+            )
+
+            return ConversionResult(
+                output_path=output_filepath,
+                mime_type=mime_type,
+                was_converted=not can_remux,
+                was_compressed=False,
+                original_size=original_size,
+                final_size=final_size,
+                original_codec=original_codec,
+                final_codec=final_codec
+            )
+        except FFmpegNotFoundError:
+            logger.error("FFmpeg not found")
+            raise
+        except FFmpegError as e:
+            logger.error(f"Failed to extract audio from video {filepath}: {e}")
+            raise
+    
+    # Handle audio files - check if conversion needed
+    needs_conversion = False
+    file_ext = os.path.splitext(filepath)[1].lower()
+
+    # Note: Connector-specific codec restrictions are handled via connector_specs.unsupported_codecs
+    # which is already applied in get_supported_codecs() above
+
+    if audio_codec is None:
+        needs_conversion = True
+        logger.info(f"Unknown codec for {original_filename}, will attempt conversion")
+    elif file_ext == '.webm':
+        # WebM containers from MediaRecorder often lack seek cues, making browser
+        # audio players unable to seek. Force conversion to a seekable format.
+        needs_conversion = True
+        logger.info(f"Converting {original_filename} - WebM container lacks seek support")
+    elif is_asr_endpoint and audio_codec == 'aac':
+        needs_conversion = True
+        logger.info(f"Converting AAC-encoded file for ASR endpoint compatibility")
+    elif audio_codec not in supported_codecs:
+        needs_conversion = True
+        logger.info(f"Converting {original_filename} (codec: {audio_codec}) - unsupported for processing")
+    
+    if needs_conversion:
+        # Determine target codec
+        # If chunking is needed, always convert to MP3 (chunking requires MP3 anyway)
+        # This avoids double conversion: original → configured codec → mp3
+        if needs_chunking:
+            target_codec = 'mp3'
+            logger.info(f"Using MP3 for {original_filename} since chunking is needed")
+        else:
+            # Fall back to mp3 if AUDIO_CODEC is unsupported by connector
+            target_codec = AUDIO_CODEC
+            if connector_specs and connector_specs.unsupported_codecs:
+                if AUDIO_CODEC in connector_specs.unsupported_codecs:
+                    target_codec = 'mp3'
+                    logger.warning(
+                        f"AUDIO_CODEC '{AUDIO_CODEC}' is not supported by connector, "
+                        f"falling back to mp3 for {original_filename}"
+                    )
+
+        logger.info(f"Converting {original_filename} to {target_codec.upper()}")
+
+        try:
+            output_filepath, mime_type, _ = compress_audio(
+                filepath,
+                codec=target_codec,
+                bitrate=AUDIO_BITRATE,
+                delete_original=delete_original,
+                codec_info=codec_info
+            )
+            
+            final_size = os.path.getsize(output_filepath)
+            reduction = ((original_size - final_size) / original_size * 100) if original_size > 0 else 0
+            
+            logger.info(
+                f"Successfully converted {original_filename}: "
+                f"{original_size/1024/1024:.1f}MB -> {final_size/1024/1024:.1f}MB "
+                f"({reduction:.1f}% reduction)"
+            )
+            
+            return ConversionResult(
+                output_path=output_filepath,
+                mime_type=mime_type,
+                was_converted=True,
+                was_compressed=False,
+                original_size=original_size,
+                final_size=final_size,
+                original_codec=original_codec,
+                final_codec=target_codec
+            )
+        except FFmpegNotFoundError:
+            logger.error("FFmpeg not found")
+            raise
+        except FFmpegError as e:
+            logger.error(f"FFmpeg conversion failed for {filepath}: {e}")
+            raise
+    
+    # Audio file with supported codec - check if we should compress lossless
+    logger.info(f"Codec {audio_codec} is supported, no conversion needed")
+
+    if AUDIO_COMPRESS_UPLOADS:
+        # Determine target codec for compression - fall back to mp3 if AUDIO_CODEC is unsupported
+        compress_target_codec = AUDIO_CODEC
+        if connector_specs and connector_specs.unsupported_codecs:
+            if AUDIO_CODEC in connector_specs.unsupported_codecs:
+                compress_target_codec = 'mp3'
+                logger.warning(
+                    f"AUDIO_CODEC '{AUDIO_CODEC}' is not supported by connector, "
+                    f"falling back to mp3 for lossless compression of {original_filename}"
+                )
+
+        try:
+            # Check if file is lossless
+            if is_lossless_audio(filepath, codec_info=codec_info):
+                # Skip if already in target codec (e.g., FLAC to FLAC)
+                if audio_codec == compress_target_codec:
+                    logger.info(f"File already in target codec {compress_target_codec}, no compression needed")
+                    return ConversionResult(
+                        output_path=filepath,
+                        mime_type=_guess_mime_type(filepath),
+                        was_converted=False,
+                        was_compressed=False,
+                        original_size=original_size,
+                        final_size=original_size,
+                        original_codec=original_codec,
+                        final_codec=audio_codec
+                    )
+
+                logger.info(f"Compressing lossless audio ({audio_codec}) to {compress_target_codec.upper()}")
+
+                # Perform compression
+                compressed_path, mime_type, _ = compress_audio(
+                    filepath,
+                    codec=compress_target_codec,
+                    bitrate=AUDIO_BITRATE,
+                    delete_original=delete_original,
+                    codec_info=codec_info
+                )
+
+                final_size = os.path.getsize(compressed_path)
+                reduction = ((original_size - final_size) / original_size * 100) if original_size > 0 else 0
+
+                logger.info(
+                    f"Successfully compressed {original_filename}: "
+                    f"{original_size/1024/1024:.1f}MB -> {final_size/1024/1024:.1f}MB "
+                    f"({reduction:.1f}% reduction)"
+                )
+
+                return ConversionResult(
+                    output_path=compressed_path,
+                    mime_type=mime_type,
+                    was_converted=False,
+                    was_compressed=True,
+                    original_size=original_size,
+                    final_size=final_size,
+                    original_codec=original_codec,
+                    final_codec=compress_target_codec
+                )
+        except Exception as e:
+            logger.warning(f"Failed to compress lossless audio: {e}. Continuing with original.")
+            # Fall through to return original file
+
+    # No processing needed - the file is stored as-is. Before returning,
+    # repair MP3s that lack a Xing/Info (VBR) header: ffmpeg has to estimate
+    # their duration from bitrate and Chromium-based browsers stutter during
+    # playback/seeking (issue #325). A lossless in-place remux writes a
+    # proper header without re-encoding. Best-effort: any failure keeps the
+    # original file.
+    final_size = original_size
+    if audio_codec == 'mp3':
+        try:
+            from src.utils.ffprobe import mp3_duration_is_estimated
+            from src.utils.ffmpeg_utils import remux_mp3_in_place
+            if mp3_duration_is_estimated(filepath):
+                logger.info(
+                    f"MP3 {original_filename} is missing a Xing/VBR header "
+                    f"(duration estimated from bitrate) — remuxing losslessly"
+                )
+                remux_mp3_in_place(filepath)
+                final_size = os.path.getsize(filepath)
+        except Exception as e:
+            logger.warning(
+                f"Xing header repair failed for {original_filename}: {e}. "
+                f"Continuing with original file."
+            )
+
+    return ConversionResult(
+        output_path=filepath,
+        mime_type=_guess_mime_type(filepath),
+        was_converted=False,
+        was_compressed=False,
+        original_size=original_size,
+        final_size=final_size,
+        original_codec=original_codec,
+        final_codec=audio_codec
+    )
+
+
+def _guess_mime_type(filepath: str) -> str:
+    """
+    Guess MIME type from file extension.
+
+    Args:
+        filepath: Path to the file
+
+    Returns:
+        MIME type string
+    """
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(filepath)
+    return mime_type or 'application/octet-stream'

@@ -1,0 +1,349 @@
+# Features
+
+Speakr combines powerful transcription capabilities with intelligent AI features to transform your audio recordings into valuable, actionable knowledge. Every feature is designed to save time and extract maximum value from your spoken content.
+
+## Recording & Capture
+
+### Multi-Platform System Audio Capture
+
+Record your microphone, your system audio, or a mix of both — with platform-aware setup guidance. Speakr detects your OS and browser and shows a per-OS help guide for what works where: Chrome / Edge on Windows or ChromeOS captures full system audio out of the box via the "Share system audio" checkbox; macOS and Linux capture tab audio directly, and full system audio via documented virtual-audio-device workflows (BlackHole + Multi-Output Device on macOS, `pactl module-virtual-source` one-liner on Linux). A small amber indicator appears on the System Audio / Mic + System buttons when full system audio isn't expected to work on the current platform, so users know before clicking. See the [Recording guide](user-guide/recording.md#platform-support-matrix) for the full matrix.
+
+### Multi-Input Recording (Mic + Secondary Device)
+
+A new Input devices picker in the upload modal lets you pick a primary microphone AND an optional secondary device (a Pulse monitor source, BlackHole, VB-Cable, etc.). Speakr captures both streams in parallel and mixes them via Web Audio into a single track — the canonical solution for capturing **both sides of a meeting** on macOS or Linux where the browser can't capture full system audio natively. Virtual / monitor devices are detected and badged in the picker. A separate toggle disables Chrome's echo cancellation / noise suppression / auto-gain — necessary for monitor-source capture because the suppressor otherwise gates sustained speech to silence.
+
+### Recording Stats
+
+A per-recording Stats tab shows total length, speaker count, conversation turns, and word count as headline metrics, then a per-speaker breakdown table (desktop) or card stack (mobile) showing each speaker's speaking time, percentage of total audio, turn count, words, and WPM. A silence row shows how much of the recording was actually quiet. Stats appear automatically when the transcript has speaker diarisation with per-segment timestamps.
+
+### Server-Side Recording Sessions
+
+An opt-in mode (`ENABLE_SERVER_RECORDING_CHUNKS`) streams in-app recording chunks to the server as you record instead of buffering them in browser memory, raising the practical recording ceiling to hours-long sessions and letting you resume a recording after a page reload. See the [Recording guide](user-guide/recording.md#server-side-recording-sessions-long-recordings) and [admin setup](admin-guide/recording-sessions.md).
+
+### Joining Files at Upload
+
+When a recorder or phone splits a meeting into several files, the upload dialog can join them into one recording: choose **One recording** above the file list, check the order (by modified time and name, adjustable by dragging or with the arrows), and upload. Speakr joins the audio once every file has arrived and transcribes it a single time. See [Joining Several Files into One Recording](user-guide/recording.md#joining-several-files-into-one-recording).
+
+### Sliced File Uploads
+
+Uploads of files larger than 16 MB are sent as fixed-size slices through the same session endpoints and reassembled server-side, so a reverse proxy with a request-body limit below the file size (Cloudflare caps bodies at 100 MB on most plans) no longer blocks large uploads. This needs no configuration; see [Recording Sessions](admin-guide/recording-sessions.md#sliced-uploads-of-files-on-disk).
+
+## Core Transcription Features
+
+### Multi-Engine Support
+
+Speakr supports multiple transcription engines to match your needs and budget. Use [OpenAI's Whisper API](getting-started.md#option-a-openai-whisper-configuration) for quick, cloud-based transcription with excellent accuracy. Deploy the [recommended ASR container](getting-started.md#option-b-custom-asr-endpoint-configuration) for advanced features like speaker diarization and local processing. Use [Mistral Voxtral](getting-started/installation.md#for-mistral-voxtral-cloud-based-diarization) for cloud-based diarization via the Mistral API, or run [VibeVoice ASR](getting-started/installation.md#for-vibevoice-asr-self-hosted-via-vllm) on your own hardware for fully self-hosted transcription with diarization. For long, multi-speaker meetings, [AssemblyAI](getting-started/installation.md#for-assemblyai-cloud-based-diarization) offers cloud diarization and handles multi-hour files in a single job. See the [installation guide](getting-started/installation.md) for detailed setup instructions. The system automatically handles different audio formats, converting them as needed for optimal transcription quality.
+
+### Speaker Diarization
+
+When using the [ASR endpoint](getting-started.md#option-b-custom-asr-endpoint-configuration), Speakr automatically identifies different speakers in your recordings. If you encounter issues, check the [troubleshooting guide](troubleshooting.md#speaker-identification-not-working). Each speaker gets a unique label that you can later customize with actual names. The system remembers these speaker profiles, building a library that improves identification accuracy over time. Manage your speaker library in [account settings](user-guide/settings.md). This feature transforms multi-person meetings from walls of text into organized conversations.
+
+You can guide diarization with a speaker count. The upload, recording, and reprocess dialogs offer a Range / Exact toggle (remembered per user): Range sends a minimum and maximum, while Exact sends one number, and providers that only accept an exact count (such as OpenASR) show the single field automatically. Tag and folder defaults work with either form.
+
+**Self-Hosted Diarization with OpenASR**: OpenASR runs locally with an OpenAI-compatible API, diarizes with an exact speaker count, and, on servers from openasr#379 onward, returns speaker embeddings when `ASR_RETURN_SPEAKER_EMBEDDINGS=true`, so voice profiles work with it the same way they do with WhisperX.
+
+**Cloud Diarization with OpenAI**: When using OpenAI's `gpt-4o-transcribe-diarize` model, speaker diarization is also available with speakers labeled as A, B, C, etc. For longer files (over ~23 minutes) that require chunking, the system maintains speaker identity across chunks using audio reference samples. This technique supports **up to 4 speakers** - recordings with more speakers may have inconsistent labels across different sections of the transcript.
+
+**Cloud Diarization with Mistral**: Mistral's Voxtral model provides built-in speaker diarization and automatic language detection. It handles chunking internally, so long files work without extra configuration.
+
+**Self-Hosted Diarization with VibeVoice**: Microsoft's VibeVoice ASR model runs on your own hardware via vLLM and provides speaker diarization with timestamps and language detection for 50+ languages. It's a good option if you want the quality of a dedicated ASR model without any cloud dependency.
+
+### Interactive Audio Synchronization
+
+Speakr provides seamless bidirectional synchronization between audio playback and transcript text for recordings with speaker diarization. Click any part of the transcript to jump directly to that moment in the audio, making it easy to review specific sections. As the audio plays, the system automatically highlights the currently spoken text in real-time with smooth visual feedback. Enable auto-scroll follow mode to keep the active segment centered in view, allowing you to follow along effortlessly during playback.
+
+<div style="max-width: 800px; margin: 2em auto;">
+  <img src="assets/images/screenshots/transcript-auto-follow.png" alt="Audio synchronization with auto-follow" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+  <p style="text-align: center; margin-top: 0.5rem; font-style: italic; color: #666;">The transcript auto-scrolls to follow playback; click any line to jump to that moment</p>
+</div>
+
+This interactive experience works across both simple and bubble view modes. Learn more about [audio synchronization features](user-guide/transcripts.md#audio-synchronization-and-follow-mode).
+
+### Language Support
+
+Transcribe content in dozens of languages with automatic detection or manual selection. Major languages like English, Spanish, French, German, and Chinese receive excellent support with high accuracy. The system handles multilingual content gracefully, switching between languages as needed within the same recording.
+
+## AI-Powered Intelligence
+
+### Automatic Summarization
+
+Every recording receives an AI-generated summary that captures key points, decisions, and action items. Configure this through [custom prompts](admin-guide/prompts.md). Users can also set [personal prompts](user-guide/settings.md#custom-prompts-tab) for their recordings. Summaries adapt to your content type - technical meetings get detailed technical summaries, while casual conversations receive lighter overviews. Custom prompts let you shape summaries to match your specific needs. For optimal results, Speakr supports [advanced AI models](admin-guide/model-configuration.md) including OpenAI's GPT-5 series with specialized parameters for reasoning depth and output verbosity.
+
+### Event Extraction
+
+Speakr can automatically extract calendar-worthy events from your recordings during the summary process. When enabled in your account settings, the system identifies mentions of meetings, deadlines, appointments, and other time-sensitive items. Each detected event can be exported as an ICS file compatible with any calendar application. The feature intelligently parses relative date references and provides sensible defaults when specific times aren't mentioned. Learn more about [using event extraction](user-guide/transcripts.md#event-extraction) in your workflow.
+
+### Interactive Chat
+
+Transform static transcripts into dynamic conversations with the integrated chat feature. Learn how to use AI chat effectively in the [transcripts guide](user-guide/transcripts.md). Ask questions about your recordings and receive intelligent answers based on the actual content. Request custom summaries, extract specific information, or generate derivative content like emails or reports. The AI maintains context throughout the conversation, allowing complex multi-turn interactions.
+
+### Semantic Search (Inquire Mode)
+
+Search across all your recordings using natural language questions instead of keywords through [Inquire Mode](user-guide/inquire-mode.md). The [vector store](admin-guide/vector-store.md) must be configured for this feature to work. The semantic search understands meaning and context, finding relevant content even when exact words don't match. Ask questions like "When did we discuss the budget increase?" and get results from any recording that covered that topic, regardless of the specific terminology used.
+
+An optional [agentic mode](user-guide/inquire-mode.md#agentic-inquire-beta) (opt-in beta, `ENABLE_INQUIRE_AGENT=true`) replaces the single retrieval pass with an AI agent that searches, lists, and reads your recordings iteratively until it can answer. The interface shows each step live with a stop button, keeps a collapsible activity record on every answer, and cites sources as numbered markers with timestamps; clicking a citation opens the recording and starts playback at the cited moment. Per-user privacy settings control what the agent may read: transcripts are always available, while summaries and private notes are individual opt-ins enforced by removing the corresponding capability from the agent entirely.
+
+## Organization and Management
+
+### Folders
+
+Organize recordings into folders for clean, project-based organization. Each recording belongs to exactly one folder (or no folder), providing a simple hierarchical structure alongside the flexible tagging system.
+
+**Folder Features:**
+
+- **Per-Folder Settings** - Each folder can have its own custom AI prompts, default transcription language, and ASR speaker settings
+- **Sidebar Selector** - Quick folder dropdown to filter recordings by folder
+- **Folder Pills** - Visual indicators showing which folder a recording belongs to
+- **Group Folders** - Share folders with groups for automatic access when recordings are added
+- **Retention Policies** - Set folder-specific retention periods or protect folder contents from auto-deletion
+
+Folders complement tags rather than replacing them. Use folders for primary organization (by project, client, or meeting type) and tags for cross-cutting categorization (status, topics, follow-ups).
+
+!!! note "Enabling Folders"
+    Folders are disabled by default. Administrators must set `enable_folders` to `true` in System Settings or set `ENABLE_FOLDERS=true` in the environment.
+
+See the [Folders Guide](user-guide/folders.md) for detailed usage instructions.
+
+### Bulk Operations
+
+Select multiple recordings in the sidebar to perform batch operations efficiently. Enter multi-select mode by clicking the checkbox icon or using keyboard shortcuts, then select individual recordings or use Ctrl/Cmd+A to select all visible recordings. With Ctrl-click (Cmd-click on macOS), a recording is added to or removed from the selection, and with Shift-click, every recording between the last one clicked and the current one is selected. Either way, multi-select mode is turned on, and the open recording is the starting point for Shift-click.
+
+**Available bulk actions:**
+
+- **Delete** - Remove multiple recordings at once with confirmation
+- **Add/Remove Tags** - Apply or remove tags from all selected recordings
+- **Reprocess** - Regenerate transcriptions or summaries for multiple recordings
+- **Toggle Inbox/Highlight** - Mark recordings as inbox items or toggle highlight status
+
+The floating action bar appears when recordings are selected, showing the count and available operations. Press Escape to exit multi-select mode or click outside the selection area.
+
+### Tagging System
+
+Organize recordings with a flexible [tagging system](user-guide/settings.md#tag-management-tab) that goes beyond simple labels. Tags can include [custom AI prompts](admin-guide/prompts.md) for specialized processing. Each tag can carry [custom AI prompts](admin-guide/prompts.md) and transcription settings, enabling automatic specialized processing based on content type, automatically applying specialized processing to tagged recordings. Tags use colors for visual organization and stack intelligently when multiple tags apply to the same recording.
+
+Every label is also a link. Clicking a tag filters the list to it and puts `/label/<name>` in the address bar, so a group of recordings can be bookmarked or shared the same way `/recordings/<id>` links a single one. The name is matched exactly but case-insensitively (`/label/Q3%20Planning` and `/label/q3%20planning` reach the same label), and it resolves against the tags the person opening it can see - so a link stays private, showing each viewer only their own recordings under that name, and covering both their personal tag and a group tag if they happen to share it.
+
+### Retention Policies and Auto-Deletion
+
+Implement intelligent data lifecycle management with flexible retention policies. Set a global retention period for automatic cleanup of old recordings, with the choice to delete just audio files (preserving valuable transcriptions) or complete recordings. Tags can override global retention with custom retention periods - keep legal records for 7 years, marketing content for 6 months, and general meetings for 90 days, all through tag-level configuration. Protected tags prevent specific recordings from ever being auto-deleted, perfect for compliance requirements and permanent archives. Group tags can enforce group-wide retention policies. The system provides preview functionality to see exactly what will be deleted before any changes occur, and administrators can control whether users can delete their own recordings or if deletion requires admin approval.
+
+**Integrated Speaker Data Cleanup**: When recordings are deleted through auto-deletion or manual deletion, the system automatically manages associated speaker voice profiles to maintain privacy compliance. Orphaned speaker profiles (those with no remaining recordings) are automatically removed during scheduled cleanup, ensuring biometric voice data is not retained unnecessarily. This automatic cleanup works with both audio-only and full recording deletion modes, providing GDPR-compliant data minimization without requiring manual intervention.
+
+### Speaker Management
+
+Build and maintain a library of speaker profiles that persist across recordings. [Identify speakers](user-guide/transcripts.md#speaker-identification) after each transcription to build your library. Once identified, speakers are remembered and suggested in future recordings. The system tracks usage statistics, showing how often each speaker appears and when they were last identified. Bulk management tools help maintain a clean, organized speaker library.
+
+**Renaming and merging**: Each named speaker in a transcript is linked to the saved speaker. Renaming a speaker in **Account, Speakers Management** shows the new name in every recording that speaker appears in, and merging speakers shows the kept speaker in every recording of the merged ones: transcript, participants and Inquire search. Summaries keep the names they were written with until they are regenerated. Recordings transcribed before v0.10.11-alpha are linked once at upgrade, through voice samples where they exist and otherwise by name.
+
+**Voice Profile Recognition**: A person's voice profile is built from samples: each time you name someone in a recording, Speakr keeps that recording's voice embedding for them (up to 20 per person, oldest dropped first). Embeddings of any size work; WhisperX returns 256 dimensions. Samples that closely resemble each other form a voice variant, so the same person on a phone and in a meeting room can have two, and a new recording is compared with every variant, the closest one counting. The variants are always rebuilt from the samples, which makes corrections complete: renaming a speaker moves their sample to the right person, and removing a sample in **Account, Speakers Management, Voice profile** undoes its effect entirely.
+
+Several safeguards keep profiles clean. A speaker with less than 15 seconds of speech in a recording (`VOICE_PROFILE_MIN_SPEECH_SECONDS`) neither trains a profile nor gets auto-labelled, since such a short stretch gives a noisy embedding. A sample that is unlike everything a well-established profile already holds is kept out and logged as a likely wrong name. Samples from auto-labelling count half as much as names a person confirmed, and confirming the name in the speaker dialog upgrades them. Profiles built before this design are kept and read as one sample, weighted by how many recordings built them.
+
+Match thresholds calibrate themselves: once a voice space holds enough samples, Speakr compares each sample with the same person's other samples and with other people's, and places the threshold between the two distributions. Suggestions and the low / medium / high auto-labelling settings are derived from it; until then the fixed defaults apply. The admin **Voice embedding compatibility** card shows the threshold in use.
+
+**In-App Notifications**: The user menu carries an unread badge and a panel listing anything that needs attention, such as a change in the transcription backend's voice embedding model. Notices that describe a condition rather than an event clear themselves when the condition ends, so restoring a backend removes the warning without anyone dismissing it. Notification text is localized like the rest of the interface.
+
+**Email Notifications**: Each user can opt in to an email when one of their recordings finishes transcribing, or fails, from their [account preferences](user-guide/settings.md#notifications). It uses the same SMTP configuration as email verification and password resets, and is off by default. Set `APP_BASE_URL` so the message can link back to the recording. See [Email Setup](admin-guide/email-setup.md#processing-notifications).
+
+**Embedding Model Changes**: Voice profiles are only comparable with embeddings from the model that produced them. If the transcription backend starts returning embeddings from a different model, whether because the endpoint was repointed or because the service upgraded itself, existing profiles stop matching anything. On its own this failure is silent: matching simply returns nothing.
+
+Speakr detects it by sending a short fixed clip to the backend and comparing the embedding it gets back against the one recorded when voice matching first worked. Each model it recognises this way gets its own **voice space**, and embeddings are only compared within one space: profiles are kept separately per model, so switching from WhisperX to OpenASR and back leaves each backend's profiles intact, and a new model starts learning its own profiles as you name speakers. Profiles stored before voice spaces existed belong to the space of the model the reference was taken from. With the check disabled, nothing is assigned a space and matching works as before. The check runs at startup, which is when an embedding model realistically changes, and on demand from the **Voice embedding compatibility** card on the Admin page, which also shows the current verdict, the embedding size and when it was last checked. When it detects a change, Speakr writes a banner into the startup log and raises a notification for every administrator, keeping the original reference so that restoring the previous backend clears both by itself. If the change was intended, use **Re-baseline** on that card to accept the new model and clear the warning; the previous model's profiles stay in their own space and match again if that backend is restored. A backend that is simply unreachable is reported as a failed check rather than a changed model.
+
+Set `DISABLE_VOICE_EMBEDDING_CHECK=true` to turn the check off. The clip costs one short transcription each time it runs.
+
+**Auto Speaker Labeling**: Enable automatic speaker identification in your [account settings](user-guide/settings.md#processing-preferences). When enabled, new recordings are automatically analyzed against your speaker profiles, and matching speakers are labeled without manual intervention. Each person is given to at most one speaker in a recording, and a speaker whose two best candidates are nearly tied is left for you. Configure the confidence threshold to balance between more matches (low threshold) and higher accuracy (high threshold). This feature requires WhisperX ASR with speaker embeddings enabled.
+
+**Speaker Profile Preservation**: By default, speaker profiles and voice embeddings are preserved even when all associated recordings are deleted. Set `DELETE_ORPHANED_SPEAKERS=true` to automatically clean up speakers with no remaining recordings.
+
+### Custom Prompts
+
+Shape AI behavior with [custom prompts](admin-guide/prompts.md) at multiple levels. Understand the [prompt hierarchy](admin-guide/prompts.md#understanding-prompt-hierarchy) for effective configuration. Personal prompts apply to all your recordings, while tag-specific prompts activate for particular content types. The hierarchical system ensures the right prompt applies to each recording, with intelligent stacking when multiple prompts are relevant.
+
+## Sharing and Collaboration
+
+Speakr provides comprehensive collaboration features that scale from individual sharing to organization-wide group management. Choose the right sharing method for each situation - collaborate with specific colleagues through user-to-user sharing, automate access for groups through group tags, or create public links for external stakeholders.
+
+### Internal Sharing (User-to-User)
+
+Share recordings directly with other users in your Speakr instance through secure, tracked internal shares. Search for colleagues by username and grant precisely the access level they need - view-only for information distribution, edit permissions for collaborative documentation, or re-share rights for group coordinators who need to extend access to others.
+
+Recipients with view access can read transcriptions, review summaries and notes, listen to audio, and use the AI chat feature to explore content. Edit permissions add the ability to modify metadata, update notes, and manage tags. Re-share permissions enable recipients to share with additional users and manage those downstream shares.
+
+Each user can maintain completely private personal notes on shared recordings. These notes remain invisible to the recording owner and other recipients, providing a secure space for individual observations and follow-ups. Access revocation is immediate and thorough - when you revoke someone's access, they lose all capabilities and their personal notes are automatically removed.
+
+The centralized share management interface shows all current shares with each recipient's permission level and share creation date. Modify permissions or revoke access instantly, maintaining complete control over collaborative access throughout the recording's lifecycle. Read more in the [Sharing & Collaboration guide](user-guide/sharing.md).
+
+### Group Management
+
+Organize users into groups for streamlined collaboration on projects, departments, or any grouping that regularly works together. Groups eliminate the tedious process of individually sharing each recording with multiple colleagues by automating access through group tags.
+
+Full instance administrators create groups and can assign group admin roles to group leads or managers. Group admins can manage membership, add or remove users, change roles, and control their group's organizational structure without requiring global administrative access. This distributed administration scales group management while maintaining security boundaries.
+
+Group members see group-specific tags in their interface and automatically receive recordings when any teammate applies group tags. This creates a collaborative space where information flows naturally to everyone who needs it. Groups integrate seamlessly with personal organization - users maintain their private tags alongside group tags, creating systems that serve both individual and group needs. Learn more in the [Group Collaboration guide](user-guide/groups.md).
+
+### Group Tags with Auto-Share
+
+Group tags are the automation engine for group collaboration. Unlike personal tags that organize individual content, group tags trigger automatic sharing with all group members when applied to any recording.
+
+Any group member can apply group tags to their recordings. The moment a group tag is applied, Speakr creates internal shares for all group members (excluding the owner), granting view and edit permissions. This automatic sharing happens intelligently - existing shares aren't duplicated, group leads can create admin-only tags for sensitive content, and the system tracks all sharing for audit purposes.
+
+Group tags appear with a distinctive users icon (👥) throughout the interface, making group content immediately recognizable. Apply multiple group tags to share with multiple groups simultaneously, enabling cross-functional collaboration. Custom retention policies can be attached to group tags, automatically managing content lifecycle based on group-specific requirements.
+
+Advanced auto-sharing options let group admins control sharing scope. Share with all group members for full collaboration, or restrict to group leads only for sensitive content requiring administrative oversight. Retroactive syncing can share existing group-tagged recordings with current members after group restructuring. See the [Group Management guide](admin-guide/group-management.md) for administrative details.
+
+### Secure Share Links
+
+Generate cryptographically secure links to [share recordings](user-guide/sharing.md) with people outside your Speakr instance - clients, partners, or anyone who needs access without an account. Each link uses unguessable tokens and works over HTTPS for security, providing read-only access to exactly the content you choose to share.
+
+Control precisely what recipients see by including or excluding summaries and notes. The transcription is always included as the core content, but you decide whether to add AI-generated insights or your personal annotations. Recipients get a clean, professional view optimized for content consumption without access to your administrative interface or other recordings.
+
+Administrators can control public sharing at multiple levels. Disable public sharing globally to prevent all public link creation, or leave it enabled and grant permissions per-user for granular control. This flexibility supports organizations with varying security requirements - some users might need external sharing capabilities while others should only share internally.
+
+Share links remain valid until explicitly revoked through the central share management interface. Modify what's included in a share without generating new links, or delete shares instantly to revoke access. All your shared recordings are tracked in one interface for easy management and audit. Security best practices are enforced - HTTPS is required for sharing operations, and the system warns against posting links publicly or sharing sensitive content inappropriately.
+
+### Export Options
+
+Export recordings in multiple formats for different purposes. Generate Word documents with complete transcripts, summaries, and notes for formal documentation. Copy formatted text to clipboards for quick sharing. Export individual components like summaries or notes for focused distribution. Download transcriptions with [customizable templates](user-guide/transcript-templates.md) that format your content for different use cases, from subtitles to interview formats.
+
+### Real-Time Monitoring
+
+Track all your shared recordings from a central location. See what's been shared, when, and with what permissions. Modify share settings without generating new links, or instantly revoke access when shares are no longer appropriate. View shared recordings alongside your own content with clear visual indicators showing ownership and group affiliation.
+
+## API Access
+
+### Personal Access Tokens
+
+Speakr provides [API token authentication](user-guide/api-tokens.md) for programmatic access to your recordings. Create personal access tokens from your Account Settings to authenticate automation tools, scripts, and custom integrations without sharing your password.
+
+Tokens work with multiple authentication methods - the standard Authorization Bearer header, custom X-API-Token or API-Token headers, or query parameters for simple integrations. Each token is tied to your user account and provides the same access as logging in through the web interface.
+
+### Integration Support
+
+Build powerful workflows with popular automation platforms:
+
+- **n8n / Zapier / Make** - Trigger transcriptions, retrieve recordings, and integrate Speakr into your automation workflows
+- **Custom scripts** - Access your recordings programmatically with Python, JavaScript, or any language that supports HTTP
+- **CI/CD pipelines** - Automate audio processing as part of development workflows
+- **Mobile apps** - Build custom interfaces that connect to your Speakr instance
+
+### Token Security
+
+All tokens are hashed using SHA-256 before storage - the plaintext token is shown only once at creation. Set custom expiration periods for temporary integrations, or create non-expiring tokens for permanent workflows. Revoke tokens instantly from the Account Settings if compromised.
+
+### Webhooks
+
+Speakr can push outbound, HMAC-signed webhooks to your own endpoints when recordings move through their lifecycle. Subscriptions are managed from the account UI or the `/api/v1/webhooks` API, and delivery is resilient: failed sends are retried with exponential backoff, a subscription is auto-paused after repeated failures, and outbound requests are guarded by SSRF protection.
+
+The events that can be subscribed to are `recording.created`, `recording.transcription.started`, `recording.transcription.completed`, `recording.transcription.failed`, `recording.summary.completed`, `recording.summary.failed`, `recording.events.extracted`, `recording.updated`, and `recording.deleted`. See the [Webhooks admin guide](admin-guide/webhooks.md) for payload formats and setup.
+
+## Advanced Capabilities
+
+### Audio Chunking
+
+Handle large audio files that exceed API limits through intelligent chunking. See the [troubleshooting guide](troubleshooting.md#files-over-25mb-fail-with-openai) for configuration details. Learn about [chunking strategies](faq.md#whats-the-difference-between-chunking-by-size-vs-duration) in the FAQ. The system automatically splits long recordings into manageable segments, processes them separately, then seamlessly reassembles the results. Configure chunk size by duration or file size to match your API provider's requirements.
+
+### S3-Compatible Object Storage
+
+Store recording audio files in S3-compatible object storage (AWS S3, MinIO, or any S3 API provider) instead of, or in addition to, the local filesystem. Switch storage backends with a single environment variable (`FILE_STORAGE_BACKEND=s3`). Audio playback and downloads use short-lived presigned URLs, keeping large file traffic off your application server. Existing local recordings continue to work alongside S3 — Speakr reads from both backends transparently based on each recording's storage locator. Migration scripts are provided to normalize legacy paths and move historical files to S3. See the [installation guide](getting-started/installation.md#file-storage-backend-local-s3-compatible) for configuration details and the [migration guide](admin-guide/migration-guide.md#migrating-audio-files-to-s3) for transitioning existing data.
+
+### Black Hole Processing
+
+Set up a watched directory where dropped audio files are automatically processed. Configure this in [system settings](admin-guide/system-settings.md) for automated workflows. Perfect for automation workflows or batch processing, the black hole directory monitors for new files and queues them for transcription without manual intervention. In `user_directories` mode, each user gets their own subfolder, which may be named after the user id (`user123` or `123`) or the username itself (matching the naming of the per-user export folders), a clean fit for multi-tenant setups where other systems drop files per user.
+
+### Automated Export
+
+Automatically export completed transcriptions and summaries to markdown files after processing. Configure the export directory to point to your Obsidian vault, Logseq directory, or any other note-taking system for seamless integration. Choose what to export (transcription, summary, or both) and let Speakr maintain synchronized copies of your recordings in your preferred format. Custom export templates allow you to format the output to match your note-taking workflow. When a recording's tag and its folder both have an export template, the tag's template is used; otherwise the folder's, and then your default. Dates in exported files and file names are written in your timezone. Exports are organized in per-user subdirectories for multi-user instances.
+
+### Custom Vocabulary & Transcription Hints
+
+Improve transcription accuracy for domain-specific content with two complementary features:
+
+- **Hotwords** - Provide comma-separated terms (brand names, acronyms, technical jargon) that the transcription engine should prioritize. This biases the model toward correctly recognizing words it might otherwise misspell.
+- **Initial Prompt** - Give the transcription engine context about the recording content, helping it make better overall word choices when audio is ambiguous.
+
+Set these at any level - [per-user defaults](user-guide/settings.md#transcription-hints), [per-tag](user-guide/settings.md#transcription-hints-hotwords--initial-prompt), [per-folder](user-guide/folders.md), or per-recording in the Advanced ASR Options of both the upload dialog and the in-app recorder (including a saved-template picker in each). Values cascade with the upload or recording form taking highest priority, then tags, folders, and finally user defaults. See the [FAQ](faq.md#certain-specialized-words-dont-get-transcribed-properly-how-do-i-fix-this) for practical usage tips.
+
+### Custom ASR Configuration
+
+Fine-tune transcription for specific scenarios with custom ASR settings. See [ASR configuration](troubleshooting.md#asr-endpoint-returns-405-or-404-errors) for common setup issues. Set expected speaker counts for different meeting types. Configure specialized models for technical vocabulary or specific accents. Apply these settings automatically through the tagging system.
+
+## User Experience
+
+### Progressive Web App
+
+Install Speakr as a progressive web app for a native-like experience on any device. The PWA works offline for viewing existing recordings and syncs when connectivity returns. Mobile-optimized interfaces ensure smooth operation on phones and tablets.
+
+### Dark Mode
+
+Reduce eye strain with a full dark mode implementation that affects every interface element. The theme preference persists across sessions and devices, automatically applying your choice whenever you log in.
+
+### Video Retention
+
+When enabled (`VIDEO_RETENTION=true`), uploaded video files preserve their video stream for in-browser playback. Instead of extracting audio and discarding the video, Speakr keeps the original file and renders it with a native `<video>` player alongside the transcript. Audio is extracted to a temporary file for transcription only, then cleaned up automatically. All existing player controls (play/pause, seek, speed, volume) work identically with video since HTML5 `<video>` and `<audio>` share the same media API. HTTP Range requests enable efficient seeking without downloading the entire file. This feature is ideal for presentations, lectures, and screen recordings where the visual context adds value to the transcript. Default: `false` (current behavior preserved — video uploads extract audio only).
+
+Video retention also unlocks in-app **tab/window/screen video capture**: the System Audio and Mic + System recording modes gain an "Also record video" option that keeps the shared surface as a video recording — a live preview shows while recording, and the result plays back in the same docked video player. Transcription still uses only the audio track. See the [Recording guide](user-guide/recording.md#recording-the-video-too-optional) for details.
+
+<div style="max-width: 800px; margin: 2em auto;">
+  <img src="assets/images/screenshots/main-view-video.png" alt="Video playback alongside transcript" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+  <p style="text-align: center; margin-top: 0.5rem; font-style: italic; color: #666;">In-browser video playback alongside speaker-labeled transcript and summary</p>
+</div>
+
+### Video Passthrough to ASR
+
+For advanced self-hosted setups, Speakr can send original video files directly to the ASR backend without extracting audio first (`VIDEO_PASSTHROUGH_ASR=true`). This is designed for custom ASR containers that accept video input and handle audio extraction internally — for example, backends that process multiple audio tracks from a single video file. When enabled, video uploads skip audio extraction, codec conversion, and chunking entirely, letting the ASR backend control the full pipeline. Audio file uploads continue to work normally. This setting is independent of `VIDEO_RETENTION` — you can combine both to keep the video for playback while also sending it raw to ASR.
+
+### Playback Speed Control
+
+Adjust audio playback speed from 0.5x to 3x on all audio/video players throughout the application. This is useful for quickly reviewing long recordings or slowing down complex content. Your speed preference is saved to localStorage and persists across sessions.
+
+### Incognito Mode
+
+Process transcriptions without saving anything to the database. When incognito mode is enabled (`ENABLE_INCOGNITO_MODE=true`), users can upload and transcribe audio files with the assurance that the audio is deleted immediately after processing and no record is stored in the database. Close the tab and it's gone - perfect for sensitive content that shouldn't persist.
+
+### Responsive Design
+
+Access Speakr from any device with interfaces that adapt to screen size. Desktop users get a full three-panel layout with simultaneous access to recordings, transcripts, and chat. Mobile users receive a streamlined interface optimized for touch interaction and smaller screens.
+
+## Administrative Control
+
+### Multi-User Support
+
+Run a single Speakr instance for your entire group with isolated user spaces. See [user management](admin-guide/user-management.md) for details. The [FAQ](faq.md#can-multiple-people-use-the-same-speakr-instance) explains the multi-user architecture. Each user maintains their own recordings, settings, and speaker libraries. Administrators manage users, monitor usage, and configure system-wide settings without accessing individual recordings.
+
+### Single Sign-On (SSO)
+
+Integrate with your existing identity provider using OpenID Connect. Speakr supports any OIDC-compliant provider including Keycloak, Azure AD/Entra ID, Google, Auth0, and self-hosted options like Pocket ID or Authentik. Users can link existing accounts to SSO or have accounts created automatically on first login. Domain filtering lets you restrict registration to specific email domains. See the [SSO Setup Guide](admin-guide/sso-setup.md) for configuration details.
+
+### Email Verification & Password Reset
+
+Secure your instance with email verification for new registrations and enable self-service password recovery. When email verification is enabled, new users must confirm their email address before gaining access—works with both open registration and domain-restricted setups. Users can reset forgotten passwords through a secure, time-limited email link from the login page. Configure any SMTP provider including Gmail, SendGrid, Mailgun, or Amazon SES. Existing users are automatically grandfathered as verified when enabling this feature. See the [Email Setup Guide](admin-guide/email-setup.md) for configuration details.
+
+### System Monitoring
+
+Track system health with comprehensive statistics and metrics. Monitor transcription queues, storage usage, and processing performance. Identify bottlenecks and optimize configuration based on actual usage patterns.
+
+### Token Usage Tracking & Budgets
+
+Monitor and control LLM API consumption with per-user token tracking and budget enforcement. The system tracks all AI operations including summarization, chat, title generation, and event extraction.
+
+**Per-User Budgets**: Set monthly token limits for individual users to control costs. Users see their remaining budget in the interface and receive warnings at 80% consumption. Once a budget is exhausted, AI operations are blocked until the next month.
+
+**Admin Dashboard**: System Statistics shows tokens per day by task, cost per month and per model, and each user's usage against the budget. Cost tracking is available when using OpenRouter or other providers that return cost information. See the [admin guide](admin-guide/statistics.md#usage-and-cost) for details.
+
+### Transcription Usage Tracking & Budgets
+
+Monitor and control speech-to-text API consumption separately from LLM tokens. The system tracks all transcription operations across different connectors (OpenAI Whisper, OpenAI Transcribe, and self-hosted ASR).
+
+**Per-User Budgets**: Set monthly transcription limits (in minutes) for individual users. Users receive warnings at 80% consumption, and new transcriptions are blocked when the budget is exhausted until the next month.
+
+**Cost Estimation**: The system calculates estimated transcription costs based on the connector used - $0.006/minute for OpenAI Whisper, $0.003-$0.006/minute for OpenAI Transcribe models, and $0 for self-hosted ASR endpoints. This helps organizations forecast costs and identify heavy users.
+
+**Admin Dashboard**: System Statistics shows minutes transcribed per day, estimated costs, and each user's minutes against the budget. See the [admin guide](admin-guide/statistics.md#usage-and-cost) for details.
+
+### Flexible Configuration
+
+Configure every aspect of Speakr through [environment variables](getting-started.md#step-3-configure-your-transcription-service) and [admin settings](admin-guide/index.md). Check [system settings](admin-guide/system-settings.md) for global configuration options. Set API endpoints, adjust processing limits, enable or disable features, and customize the user experience. The system adapts to your infrastructure and requirements.
+
+---
+
+Return to [Home](index.md) →

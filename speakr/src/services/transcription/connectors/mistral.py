@@ -1,0 +1,282 @@
+"""
+Mistral Voxtral API connector for audio transcription.
+
+Supports Mistral's Voxtral models which provide high-quality transcription
+with diarization, context biasing (hotwords), and language detection.
+Particularly strong for French and multilingual audio.
+"""
+
+import logging
+import os
+import re
+import httpx
+from typing import Dict, Any, Set, List, Optional
+
+from ..base import (
+    BaseTranscriptionConnector,
+    TranscriptionCapability,
+    TranscriptionRequest,
+    TranscriptionResponse,
+    TranscriptionSegment,
+    ConnectorSpecifications,
+)
+from ..exceptions import TranscriptionError, ConfigurationError, ProviderError
+
+logger = logging.getLogger(__name__)
+
+
+class MistralTranscriptionConnector(BaseTranscriptionConnector):
+    """Connector for Mistral Voxtral transcription API."""
+
+    CAPABILITIES: Set[TranscriptionCapability] = {
+        TranscriptionCapability.DIARIZATION,
+        TranscriptionCapability.TIMESTAMPS,
+        TranscriptionCapability.LANGUAGE_DETECTION,
+        # Hotwords are sent as Voxtral's `context_bias` array. Initial prompt
+        # is not accepted -- the connector logs a warning and ignores it.
+        TranscriptionCapability.HOTWORDS,
+    }
+    PROVIDER_NAME = "mistral"
+
+    # Default class-level spec assumes no chunking — Voxtral handles up to 3
+    # hours natively. Instances can override this in __init__ when
+    # MISTRAL_ENABLE_CHUNKING=true (issue #267).
+    SPECIFICATIONS = ConnectorSpecifications(
+        max_file_size_bytes=None,
+        max_duration_seconds=None,
+        handles_chunking_internally=True,
+        recommended_chunk_seconds=0,
+    )
+
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the Mistral Voxtral connector.
+
+        Args:
+            config: Configuration dict with keys:
+                - api_key: Mistral API key (required)
+                - base_url: API base URL (default: https://api.mistral.ai)
+                - model: Model name (default: voxtral-mini-latest)
+        """
+        super().__init__(config)
+
+        self.api_key = config['api_key']
+        self.base_url = (config.get('base_url') or 'https://api.mistral.ai').rstrip('/')
+        self.model = config.get('model', 'voxtral-mini-latest')
+
+        self.client = httpx.Client(
+            base_url=self.base_url,
+            headers={
+                'Authorization': f'Bearer {self.api_key}',
+                'User-Agent': 'Speakr/1.0 (https://github.com/murtaza-nasir/speakr)',
+            },
+            timeout=httpx.Timeout(60.0, read=1800.0, write=300.0),
+            verify=True,
+        )
+
+        # Optional app-side chunking for very long recordings. Voxtral times
+        # out near its 3-hour limit on cloud inference; chunking lets users
+        # process longer meetings reliably. Diarization is per-chunk (Mistral
+        # doesn't return voice embeddings), so speakers will be remapped at
+        # chunk boundaries.
+        if os.environ.get('MISTRAL_ENABLE_CHUNKING', 'false').lower() == 'true':
+            try:
+                max_seconds = int(os.environ.get('MISTRAL_MAX_DURATION_SECONDS', '7200'))
+            except (ValueError, TypeError):
+                max_seconds = 7200
+            recommended_chunk = int(max_seconds * 0.8)
+            self.SPECIFICATIONS = ConnectorSpecifications(
+                max_file_size_bytes=None,
+                max_duration_seconds=max_seconds,
+                handles_chunking_internally=False,
+                recommended_chunk_seconds=recommended_chunk,
+            )
+            logger.info(
+                f"Mistral chunking enabled: max_duration={max_seconds}s, "
+                f"recommended_chunk={recommended_chunk}s"
+            )
+
+    def _validate_config(self) -> None:
+        """Validate required configuration."""
+        if not self.config.get('api_key'):
+            raise ConfigurationError("api_key is required for Mistral connector")
+
+    def transcribe(self, request: TranscriptionRequest) -> TranscriptionResponse:
+        """
+        Transcribe audio using Mistral Voxtral API.
+
+        Args:
+            request: Standardized transcription request
+
+        Returns:
+            TranscriptionResponse with text, segments, and optional diarization
+        """
+        try:
+            effective_model = self._effective_model(request) or self.model
+            # Build multipart form data using tuples for proper array encoding
+            file_tuple = ('file', (request.filename or 'audio.wav', request.audio_file, request.mime_type or 'application/octet-stream'))
+
+            fields: List[tuple] = [
+                ('model', effective_model),
+            ]
+
+            # Language param
+            if request.language:
+                fields.append(('language', request.language))
+                logger.info(f"Using transcription language: {request.language}")
+
+            # Diarization
+            if request.diarize:
+                fields.append(('diarize', 'true'))
+                logger.info("Diarization enabled for Mistral request")
+
+            # Context bias (hotwords) - Mistral accepts an array of strings
+            # Each item must match ^[^,\s]+$ (no commas or whitespace per item)
+            # So we split on both commas and whitespace to produce individual tokens
+            if request.hotwords:
+                context_bias = [w for w in re.split(r'[,\s]+', request.hotwords) if w]
+                for term in context_bias:
+                    fields.append(('context_bias', term))
+                if context_bias:
+                    logger.info(f"Using context bias with {len(context_bias)} terms")
+
+            # Timestamp granularities - always request segment-level timestamps
+            fields.append(('timestamp_granularities', 'segment'))
+
+            # Log prompt warning if provided (Mistral doesn't support prompt/initial_prompt)
+            if request.prompt:
+                logger.warning("Mistral Voxtral does not support initial_prompt parameter, ignoring")
+
+            logger.info(f"Sending request to Mistral API with model: {effective_model}")
+            response = self.client.post(
+                '/v1/audio/transcriptions',
+                files=[file_tuple] + [(name, (None, value)) for name, value in fields],
+            )
+
+            if response.status_code != 200:
+                error_detail = response.text
+                try:
+                    error_json = response.json()
+                    error_detail = error_json.get('message', error_json.get('detail', response.text))
+                except Exception:
+                    pass
+                raise ProviderError(
+                    f"Mistral API error: {error_detail}",
+                    provider=self.PROVIDER_NAME,
+                    status_code=response.status_code,
+                )
+
+            result = response.json()
+            logger.info(f"Mistral API response keys: {list(result.keys())}")
+            if result.get('segments'):
+                logger.info(f"First segment sample: {result['segments'][0] if result['segments'] else 'none'}")
+                logger.info(f"Total segments: {len(result['segments'])}")
+            else:
+                logger.warning(f"No segments in Mistral response. Full response (truncated): {str(result)[:500]}")
+
+            # Parse segments if available
+            segments = self._parse_segments(result.get('segments', []))
+
+            # Determine detected language
+            detected_language = result.get('language', request.language)
+
+            # Build speaker list from segments — distinct, in order of first
+            # appearance. dict.fromkeys dedupes while preserving order; a plain
+            # set() gave hash-randomised (non-deterministic) ordering, which
+            # produced an unstable speakers list across runs.
+            speakers = list(dict.fromkeys(s.speaker for s in segments if s.speaker))
+
+            return TranscriptionResponse(
+                text=result.get('text', ''),
+                segments=segments,
+                language=detected_language,
+                speakers=speakers if speakers else None,
+                provider=self.PROVIDER_NAME,
+                model=effective_model,
+                raw_response=result,
+            )
+
+        except ProviderError:
+            raise
+        except httpx.TimeoutException as e:
+            logger.error(f"Mistral API request timed out: {e}")
+            raise TranscriptionError(f"Mistral API request timed out: {e}") from e
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Mistral transcription failed: {error_msg}")
+            raise TranscriptionError(f"Mistral transcription failed: {error_msg}") from e
+
+    def _parse_segments(self, raw_segments: List[Dict[str, Any]]) -> List[TranscriptionSegment]:
+        """
+        Convert Mistral segment format to TranscriptionSegment objects.
+
+        Args:
+            raw_segments: List of segment dicts from Mistral API
+
+        Returns:
+            List of TranscriptionSegment objects
+        """
+        segments = []
+        for seg in raw_segments:
+            segment = TranscriptionSegment(
+                text=seg.get('text', ''),
+                speaker=seg.get('speaker_id', seg.get('speaker', None)),
+                start_time=seg.get('start', None),
+                end_time=seg.get('end', None),
+                confidence=seg.get('score', None),
+            )
+            segments.append(segment)
+        return segments
+
+    def list_models(self):
+        """Return Voxtral models from Mistral's /v1/models endpoint.
+
+        Filters to ids containing 'voxtral' so the dropdown only offers
+        audio-capable models.
+        """
+        try:
+            resp = self.client.get('/v1/models')
+            if resp.status_code != 200:
+                return []
+            data = resp.json().get('data', [])
+            audio = []
+            for m in data:
+                mid = m.get('id', '')
+                if mid and 'voxtral' in mid.lower():
+                    audio.append({
+                        'id': mid,
+                        'label': mid,
+                        'owned_by': m.get('owned_by', 'mistralai'),
+                    })
+            return audio
+        except Exception as e:
+            logger.warning(f"mistral /v1/models probe failed: {e}")
+            return []
+
+    def health_check(self) -> bool:
+        """Check if the connector is properly configured."""
+        return bool(self.config.get('api_key'))
+
+    @classmethod
+    def get_config_schema(cls) -> Dict[str, Any]:
+        """Return JSON schema for configuration."""
+        return {
+            "type": "object",
+            "required": ["api_key"],
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "description": "Mistral API key"
+                },
+                "base_url": {
+                    "type": "string",
+                    "default": "https://api.mistral.ai",
+                    "description": "API base URL"
+                },
+                "model": {
+                    "type": "string",
+                    "default": "voxtral-mini-latest",
+                    "description": "Voxtral model to use"
+                }
+            }
+        }

@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <!-- interactive-widget=resizes-content: keyboard resizes layout (Android). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    {% include 'includes/theme_bootstrap.html' %}
+    <script>
+      // Keyboard-safe viewport (see index.html for rationale): mirror the
+      // visible viewport height into --app-height so the keyboard never pushes
+      // the chat UI off-screen.
+      (function () {
+        var vv = window.visualViewport, root = document.documentElement;
+        function apply() { root.style.setProperty('--app-height', (vv ? vv.height : window.innerHeight) + 'px'); }
+        apply();
+        if (vv) { vv.addEventListener('resize', apply); vv.addEventListener('scroll', apply); }
+        window.addEventListener('orientationchange', function () { setTimeout(apply, 250); });
+      })();
+    </script>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+    <title>Inquire Mode - Speakr</title>
+        <!-- All dependencies bundled locally for offline support -->
+        <!-- All dependencies bundled locally for offline support -->
+        <!-- All dependencies bundled locally for offline support -->
+        <!-- All dependencies bundled locally for offline support -->
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/icon-32x32.png') }}">
+
+    <!-- Loading overlay to prevent FOUC -->
+
+    <style>
+        /* Custom checkbox styling for better visual feedback */
+        .filter-checkbox {
+            appearance: none;
+            background-color: var(--bg-input);
+            border: 2px solid var(--border-secondary);
+            border-radius: 4px;
+            width: 16px;
+            height: 16px;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        
+        .filter-checkbox:checked {
+            background-color: var(--text-accent);
+            border-color: var(--text-accent);
+        }
+        
+        .filter-checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .filter-checkbox:focus {
+            outline: 2px solid var(--text-accent);
+            outline-offset: 2px;
+        }
+        
+        .filter-checkbox:hover {
+            border-color: var(--text-accent);
+        }
+        
+        /* Enhanced markdown styling for Inquire Mode chat messages */
+        .chat-message .prose h1,
+        .chat-message .prose h2,
+        .chat-message .prose h3,
+        .chat-message .prose h4 {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-top: 1.5em;
+            margin-bottom: 0.75em;
+            line-height: 1.3;
+        }
+        
+        .chat-message .prose h1 { font-size: 1.25em; }
+        .chat-message .prose h2 { font-size: 1.15em; }
+        .chat-message .prose h3 { font-size: 1.05em; }
+        
+        .chat-message .prose p {
+            color: var(--text-primary);
+            margin-bottom: 1em;
+            line-height: 1.6;
+        }
+        
+        .chat-message .prose ul,
+        .chat-message .prose ol {
+            color: var(--text-primary);
+            margin: 0.75em 0;
+            padding-left: 1.5em;
+        }
+        
+        .chat-message .prose li {
+            color: var(--text-primary);
+            margin: 0.25em 0;
+            line-height: 1.6;
+        }
+        
+        .chat-message .prose strong {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        
+        .chat-message .prose ul { list-style-type: disc; }
+        .chat-message .prose ol { list-style-type: decimal; }
+        
+        .chat-message .prose code {
+            background-color: var(--bg-accent);
+            color: var(--text-accent);
+            padding: 0.15em 0.3em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        /* Citation chips: the agent cites sources as markdown links to
+           /recordings/<id>; style them like small tag chips so they read
+           as references rather than inline hyperlinks. */
+        .chat-message .prose a[href^="/recordings/"] {
+            display: inline-block;
+            /* Theme accent tint (same pairing as selected options/highlights)
+               so the chip contrasts slightly with the bubble in every color
+               scheme, light and dark. */
+            background-color: var(--bg-accent);
+            color: var(--text-accent);
+            border: 1px solid var(--border-accent, var(--border-secondary));
+            border-radius: 9999px;
+            padding: 0 0.55em;
+            font-size: 0.78em;
+            line-height: 1.55;
+            text-decoration: none;
+            /* Sit on the text line instead of riding above it: an
+               inline-block chip aligned to baseline extends mostly upward
+               because of its padding, so nudge it down to visually centre
+               against the surrounding line. */
+            vertical-align: -0.35em;
+            margin: 0 0.1em;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chat-message .prose a[href^="/recordings/"]:hover {
+            border-color: var(--border-focus);
+        }
+
+        /* Sources footer: numbered list mapping citation numbers to
+           recording titles. Links here render as plain links, not chips. */
+        .chat-message .citation-refs {
+            margin-top: 1em;
+            padding-top: 0.6em;
+            border-top: 1px solid var(--border-primary);
+        }
+        .chat-message .citation-refs__label {
+            font-size: 0.72em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-bottom: 0.3em;
+        }
+        .chat-message .citation-refs ol {
+            margin: 0;
+            padding-left: 1.4em;
+            font-size: 0.85em;
+        }
+        .chat-message .citation-refs li {
+            margin: 0.15em 0;
+            color: var(--text-secondary);
+        }
+        .chat-message .prose .citation-refs a[href^="/recordings/"] {
+            display: inline;
+            background: none;
+            border: none;
+            border-radius: 0;
+            padding: 0;
+            font-size: 1em;
+            vertical-align: baseline;
+            margin: 0;
+            white-space: normal;
+            color: var(--text-accent);
+            text-decoration: none;
+        }
+        .chat-message .prose .citation-refs a[href^="/recordings/"]:hover {
+            text-decoration: underline;
+        }
+    </style>
+    <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
+         <head> so that, as with the former runtime build, they follow the page's
+         own stylesheets in the cascade. -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <!-- Scripts after every stylesheet, so that no page is painted while a
+         script blocks the parser before the stylesheets are known. -->
+    <script src="{{ url_for('static', filename='vendor/js/vue.global.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/marked.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/purify.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/markdown-safe.js') }}"></script>
+    {% include 'includes/i18n_bootstrap.html' %}
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
+    {% include 'includes/loading_overlay.html' %}
+    <script src="{{ url_for('static', filename='js/timezone-sync.js') }}" defer></script>
+</head>
+<body class="h-full bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-300">
+    <div id="inquire-app" v-cloak class="h-full flex flex-col"
+         data-current-user-name="{{ (current_user.name or current_user.username) if current_user.is_authenticated else '' }}">
+        
+        <!-- Header -->
+        <header class="bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] px-3 sm:px-4 py-2 flex items-center justify-between flex-shrink-0 z-50 gap-3" style="min-height: 56px;">
+            <!-- Left side: Menu and logo -->
+            <div class="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink">
+                <!-- Mobile Sidebar Toggle — uses the design system
+                     icon-button primitive so it matches the rest of
+                     the app's icon button rhythm. -->
+                <button @click="isMobileSidebarOpen = !isMobileSidebarOpen"
+                        class="btn btn--icon lg:hidden flex-shrink-0">
+                    <i class="fas fa-bars"></i>
+                </button>
+                
+                <!-- Logo and Title (clickable to go back) -->
+                <a href="/" class="flex items-center gap-2 sm:gap-3 min-w-0 hover:opacity-80 transition-opacity">
+                    <img src="{{ url_for('static', filename='img/icon-64.png') }}" srcset="{{ url_for('static', filename='img/icon-64.png') }} 1x, {{ url_for('static', filename='img/icon-128.png') }} 2x" alt="Speakr" class="app-logo w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0">
+                    <h1 class="text-lg sm:text-xl font-bold text-[var(--text-primary)] truncate">Speakr</h1>
+                </a>
+                <span class="text-[var(--text-muted)] hidden sm:inline" aria-hidden="true">/</span>
+                <span class="t-meta hidden sm:inline" v-text="t('inquire.title')"></span>
+            </div>
+
+            <!-- Right side: the same controls as every other page
+                 (components/header-controls.html). -->
+            <div class="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                {% include 'components/header-controls.html' %}
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex overflow-hidden relative">
+            <!-- Mobile Sidebar Overlay -->
+            <div v-if="isMobileSidebarOpen" 
+                 @click="isMobileSidebarOpen = false"
+                 class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"></div>
+            
+            <!-- Left Panel: Filters -->
+            <div class="w-80 bg-[var(--bg-secondary)] border-r border-[var(--border-primary)] flex flex-col flex-shrink-0 z-50"
+                 style="transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);"
+                 :class="[
+                     'lg:relative lg:translate-x-0',
+                     isMobileSidebarOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full lg:translate-x-0'
+                 ]">
+                <!-- Mobile close button — matches the design system
+                     icon-button primitive. -->
+                <div class="lg:hidden flex items-center justify-between p-3 border-b"
+                     style="border-bottom-color: var(--border-primary);">
+                    <h2 class="text-base font-semibold">${ t('inquire.filters') }</h2>
+                    <button @click="isMobileSidebarOpen = false"
+                            class="btn btn--icon">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto custom-scrollbar">
+                    <div class="p-3 space-y-3">
+                    <!-- Filters header — h2 on desktop is hidden because
+                         the sidebar already carries an "Filters" label
+                         in the mobile close header above; on desktop
+                         the Clear all button alone is enough chrome. -->
+                    <div class="flex items-center justify-between lg:justify-end">
+                        <h2 class="text-base font-semibold lg:hidden">${ t('inquire.filters') }</h2>
+                        <button @click="clearInquireFilters" class="btn btn--sm btn--ghost">
+                            <i class="fas fa-times"></i><span>${ t('inquire.clearAll') }</span>
+                        </button>
+                    </div>
+
+                    <!-- Tag Filters -->
+                    <div class="rounded-md border p-3"
+                         style="background: var(--bg-primary); border-color: var(--border-secondary);">
+                        <h3 class="t-body-strong mb-2 flex items-center">
+                            <i class="fas fa-tags mr-2" style="color: var(--text-accent);"></i>${ t('inquire.tags') }
+                        </h3>
+                        <input type="text" v-model="tagSearchQuery" :placeholder="t('form.searchTags')"
+                               class="field mb-2"
+                               style="font-size: var(--fs-meta);">
+                        <div class="space-y-0.5 max-h-40 overflow-y-auto custom-scrollbar">
+                            <label v-for="tag in filteredTags" :key="tag.id"
+                                   class="flex items-center cursor-pointer p-1.5 rounded transition-colors hover:bg-[var(--bg-tertiary)]">
+                                <input type="checkbox" :value="tag.id" v-model="inquireFilters.selectedTags"
+                                       class="filter-checkbox">
+                                <span class="ml-2 text-sm font-medium flex-1" :style="{ color: tag.color }">${ tag.name }</span>
+                                <span class="text-xs px-1.5 py-0.5 rounded-full"
+                                      style="background: var(--bg-tertiary); color: var(--text-muted);">${ tag.recording_count }</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Speaker Filters -->
+                    <div class="rounded-md border p-3"
+                         style="background: var(--bg-primary); border-color: var(--border-secondary);">
+                        <h3 class="t-body-strong mb-2 flex items-center">
+                            <i class="fas fa-users mr-2" style="color: var(--text-accent);"></i>${ t('inquire.speakers') }
+                        </h3>
+                        <div v-if="availableFilters.speakers.length > 0">
+                            <input type="text" v-model="speakerSearchQuery" :placeholder="t('form.searchSpeakers')"
+                                   class="field mb-2"
+                                   style="font-size: var(--fs-meta);">
+                            <div class="space-y-0.5 max-h-40 overflow-y-auto custom-scrollbar">
+                                <label v-for="speaker in filteredSpeakers" :key="speaker"
+                                       class="flex items-center cursor-pointer p-1.5 rounded transition-colors hover:bg-[var(--bg-tertiary)]">
+                                    <input type="checkbox" :value="speaker" v-model="inquireFilters.selectedSpeakers"
+                                           class="filter-checkbox">
+                                    <span class="ml-2 text-sm flex-1" style="color: var(--text-primary);">${ speaker }</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div v-else class="empty" style="padding: var(--sp-3);">
+                            <div class="empty__icon"><i class="fas fa-users"></i></div>
+                            <div class="t-meta">${ t('inquire.noSpeakerData') }</div>
+                            <div class="t-meta" style="font-size: var(--fs-label); margin-top: var(--sp-1);">${ t('inquire.speakerRequirement') }</div>
+                        </div>
+                    </div>
+
+                    <!-- Date Range Filters -->
+                    <div class="rounded-md border p-3"
+                         style="background: var(--bg-primary); border-color: var(--border-secondary);">
+                        <h3 class="t-body-strong mb-2 flex items-center">
+                            <i class="fas fa-calendar mr-2" style="color: var(--text-accent);"></i>${ t('inquire.dateRange') }
+                        </h3>
+                        <div class="space-y-2">
+                            <div>
+                                <label class="t-label mb-1 block">${ t('inquire.from') }</label>
+                                <input type="date" v-model="inquireFilters.dateFrom" class="field" style="font-size: var(--fs-meta);">
+                            </div>
+                            <div>
+                                <label class="t-label mb-1 block">${ t('inquire.to') }</label>
+                                <input type="date" v-model="inquireFilters.dateTo" class="field" style="font-size: var(--fs-meta);">
+                            </div>
+                        </div>
+                    </div>
+                
+                <!-- Recording Filters - Commented Out -->
+                <!--
+                <div class="flex-1 flex flex-col px-6 pb-6 min-h-0">
+                    <div class="bg-[var(--bg-primary)] rounded-lg border border-[var(--border-secondary)] p-4 flex flex-col flex-1 min-h-0">
+                        <h3 class="font-medium mb-3 flex items-center flex-shrink-0 text-[var(--text-primary)]">
+                            <i class="fas fa-file-audio mr-2 text-[var(--text-accent)]"></i>Recordings
+                        </h3>
+                        <div class="space-y-1 flex-1 overflow-y-auto custom-scrollbar pr-2 min-h-0">
+                            <label v-for="recording in availableFilters.recordings" :key="recording.id" class="flex items-center cursor-pointer hover:bg-[var(--bg-tertiary)] p-3 rounded-md transition-colors border border-transparent hover:border-[var(--border-secondary)]">
+                                <input type="checkbox" :value="recording.id" v-model="inquireFilters.selectedRecordings" class="h-4 w-4 rounded border-[var(--border-secondary)] text-[var(--text-accent)] focus:ring-[var(--border-focus)] flex-shrink-0">
+                                <div class="ml-3 flex-1 min-w-0">
+                                    <div class="text-sm font-medium truncate text-[var(--text-primary)]" :title="recording.title">${recording.title}</div>
+                                    <div v-if="recording.meeting_date" class="text-xs text-[var(--text-muted)] mt-1">${formatDate(recording.meeting_date)}</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                -->
+                
+                    <!-- Active Filters Summary — small pill-style
+                         readout of what's currently filtered, with the
+                         accent colour on the icon so it reads as an
+                         "active" indicator. -->
+                    <div v-if="hasActiveFilters" class="rounded-md border p-3"
+                         style="background: var(--bg-primary); border-color: var(--border-secondary);">
+                        <div class="t-label mb-2 flex items-center">
+                            <i class="fas fa-filter mr-1" style="color: var(--text-accent);"></i>${ t('inquire.activeFilters') }
+                        </div>
+                        <div class="flex flex-wrap gap-1">
+                            <span v-if="inquireFilters.selectedTags.length"
+                                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px]"
+                                  style="background: var(--bg-accent); color: var(--text-accent);">
+                                <i class="fas fa-tags"></i>
+                                <span>${ inquireFilters.selectedTags.length } ${ t('inquire.tagsCount') }</span>
+                            </span>
+                            <span v-if="inquireFilters.selectedSpeakers.length"
+                                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px]"
+                                  style="background: var(--bg-accent); color: var(--text-accent);">
+                                <i class="fas fa-users"></i>
+                                <span>${ inquireFilters.selectedSpeakers.length } ${ t('inquire.speakersCount') }</span>
+                            </span>
+                            <span v-if="inquireFilters.dateFrom || inquireFilters.dateTo"
+                                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px]"
+                                  style="background: var(--bg-accent); color: var(--text-accent);">
+                                <i class="fas fa-calendar"></i>
+                                <span>${ t('inquire.dateRangeActive') }</span>
+                            </span>
+                        </div>
+                    </div>
+                    </div><!-- End of p-4 space-y-4 div -->
+                </div><!-- End of flex-1 overflow-y-auto div -->
+            </div><!-- End of w-80 sidebar div -->
+            
+            <!-- Right Panel: Chat -->
+            <div class="flex-1 flex flex-col overflow-hidden"
+                 :class="isMobileSidebarOpen ? 'hidden lg:flex' : 'flex'">
+                <!-- Chat Messages Area -->
+                <div ref="inquireMessagesRef" @scroll="handleScroll" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                    <!-- Welcome / Empty state.
+                         Polished landing layout: friendly accent
+                         icon badge, clear headline + supporting copy,
+                         and a calmer "Example questions" card that
+                         uses the bg-tertiary surface treatment the
+                         rest of the design system uses. -->
+                    <div v-if="inquireChatMessages.length === 0" class="flex flex-col items-center text-center py-12 px-4">
+                        <div class="mx-auto mb-5 w-20 h-20 rounded-full flex items-center justify-center"
+                             style="background: var(--bg-tertiary);">
+                            <i class="fas fa-search text-3xl" style="color: var(--text-accent);"></i>
+                        </div>
+                        <h2 class="text-2xl font-semibold mb-2" style="color: var(--text-primary);">
+                            ${ t('inquire.askQuestions') }
+                        </h2>
+                        <p class="t-body max-w-lg mb-6" style="color: var(--text-muted);">
+                            ${ t('inquire.selectFilters') }
+                        </p>
+                        <div class="surface-raised text-left max-w-md w-full" style="padding: var(--sp-4);">
+                            <div class="t-label mb-2">
+                                <i class="fas fa-lightbulb mr-1" style="color: var(--text-accent);"></i>
+                                ${ t('inquire.exampleQuestions') }
+                            </div>
+                            <ul class="t-body space-y-1.5" style="color: var(--text-secondary);">
+                                <li class="flex items-start gap-2">
+                                    <i class="fas fa-angle-right mt-1 text-xs" style="color: var(--text-muted);"></i>
+                                    <span>${ t('inquire.exampleQuestion1') }</span>
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <i class="fas fa-angle-right mt-1 text-xs" style="color: var(--text-muted);"></i>
+                                    <span>${ t('inquire.exampleQuestion2') }</span>
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <i class="fas fa-angle-right mt-1 text-xs" style="color: var(--text-muted);"></i>
+                                    <span>${ t('inquire.exampleQuestion3') }</span>
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <i class="fas fa-angle-right mt-1 text-xs" style="color: var(--text-muted);"></i>
+                                    <span>${ t('inquire.exampleQuestion4') }</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Chat Messages.
+                         User bubble: accent-tinted; assistant bubble:
+                         tertiary surface with prose-flush content so
+                         markdown renders consistently. Both bubbles
+                         use rounded-lg (instead of rounded-xl) so the
+                         shape matches the rest of the design system. -->
+                    <template v-for="(message, index) in inquireChatMessages" :key="index">
+                        <!-- Compaction divider: older turns above this point were
+                             folded into a memory summary the assistant still sees.
+                             Click to inspect exactly what it remembers. -->
+                        <div v-if="index === memoryState.dividerIndex && memoryState.memory" class="my-2">
+                            <button @click="memoryState.showMemory = !memoryState.showMemory"
+                                    class="w-full flex items-center gap-3 text-xs"
+                                    style="color: var(--text-muted);">
+                                <span class="flex-1 border-t" style="border-color: var(--border-primary);"></span>
+                                <span class="flex items-center gap-1.5 whitespace-nowrap">
+                                    <i class="fas fa-layer-group"></i>
+                                    <span>Earlier conversation summarized</span>
+                                    <i :class="['fas text-[10px]', memoryState.showMemory ? 'fa-chevron-up' : 'fa-chevron-down']"></i>
+                                </span>
+                                <span class="flex-1 border-t" style="border-color: var(--border-primary);"></span>
+                            </button>
+                            <div v-if="memoryState.showMemory"
+                                 class="surface-raised mt-2 text-xs whitespace-pre-wrap"
+                                 style="padding: var(--sp-3); color: var(--text-secondary);"
+                                 v-text="memoryState.memory">
+                            </div>
+                        </div>
+
+                        <div :class="['flex', message.role === 'user' ? 'justify-end' : 'justify-start']">
+                            <div class="max-w-3xl chat-message"
+                                 :class="message.role === 'user' ? 'message user-message' : 'message ai-message'">
+                                <!-- Persistent provenance: the agent's collapsed
+                                     activity line, expandable to the full timeline. -->
+                                <div v-if="message.role === 'assistant' && message.activitySummary"
+                                     class="mb-2 pb-2 border-b" style="border-color: var(--border-primary);">
+                                    <button @click="message.showSteps = !message.showSteps"
+                                            class="flex items-center gap-2 text-xs" style="color: var(--text-muted);">
+                                        <i class="fas fa-list-check"></i>
+                                        <span v-text="message.agentStepCount + (message.agentStepCount === 1 ? ' step · ' : ' steps · ') + message.activitySummary"></span>
+                                        <i :class="['fas text-[10px]', message.showSteps ? 'fa-chevron-up' : 'fa-chevron-down']"></i>
+                                    </button>
+                                    <div v-if="message.showSteps && message.steps && message.steps.length" class="mt-2 space-y-1">
+                                        <div v-for="step in message.steps" :key="step.id"
+                                             class="flex items-start gap-2 text-xs" style="color: var(--text-secondary);">
+                                            <i :class="['fas mt-0.5 w-4 text-center', step.icon]" style="color: var(--text-muted);"></i>
+                                            <span class="min-w-0">
+                                                <span v-text="step.label"></span>
+                                                <span v-if="step.detail" style="color: var(--text-muted);" v-text="' — ' + step.detail"></span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="message.html || message.content"
+                                     class="prose prose-sm max-w-none"
+                                     :class="message.role === 'user' ? 'prose-invert' : ''"
+                                     v-html="message.html || message.content">
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Loading indicator — uses the .ai-message
+                         primitive for visual consistency with normal
+                         assistant messages, plus a clear step indicator
+                         row so the user sees progress through the
+                         analysis pipeline. -->
+                    <div v-if="isInquireChatLoading && !answerStarted" class="flex justify-start">
+                        <div class="ai-message message max-w-md" style="min-width: 260px;">
+                            <div class="flex items-center gap-2">
+                                <div class="spinner flex-shrink-0"></div>
+                                <span class="t-meta flex-1" v-if="showProcessingStatus">${ chatProcessingStatus }</span>
+                                <span class="t-meta flex-1" v-else-if="agentSteps.length">Working on it...</span>
+                                <span class="t-meta flex-1" v-else>Analyzing transcriptions...</span>
+                                <button @click="stopInquireChat" class="btn btn--ghost btn--sm flex-shrink-0" title="Stop">
+                                    <i class="fas fa-stop text-xs"></i>
+                                </button>
+                            </div>
+                            <!-- Agent activity timeline: one row per tool step,
+                                 spinner while running, muted check when done.
+                                 Empty results and tool errors render calmly
+                                 (they are a normal part of searching). -->
+                            <div v-if="agentSteps.length" class="mt-2 space-y-1.5">
+                                <div v-for="step in agentSteps" :key="step.id"
+                                     class="flex items-start gap-2 text-xs" style="color: var(--text-secondary);">
+                                    <i v-if="step.status === 'running'" class="fas fa-circle-notch fa-spin mt-0.5 w-4 text-center" style="color: var(--text-accent);"></i>
+                                    <i v-else-if="step.status === 'done'" class="fas fa-check mt-0.5 w-4 text-center" style="color: var(--text-muted);"></i>
+                                    <i v-else :class="['fas mt-0.5 w-4 text-center', step.status === 'error' ? 'fa-circle-exclamation' : 'fa-minus']" style="color: var(--text-muted);"></i>
+                                    <span class="min-w-0">
+                                        <span v-text="step.label"></span>
+                                        <span v-if="step.detail" style="color: var(--text-muted);" v-text="' — ' + step.detail"></span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div v-if="showProcessingStatus" class="mt-2 flex gap-1">
+                                <div class="h-1 w-4 rounded transition-colors"
+                                     :style="{ background: chatProcessingStatus.includes('Analyzing') ? 'var(--text-accent)' : 'var(--text-accent)' }"
+                                     :class="{ 'animate-pulse': chatProcessingStatus.includes('Analyzing') }"></div>
+                                <div class="h-1 w-4 rounded transition-colors"
+                                     :style="{ background: (chatProcessingStatus.includes('Enriching') || chatProcessingStatus.includes('Searching') || chatProcessingStatus.includes('Responding')) ? 'var(--text-accent)' : 'var(--border-secondary)' }"></div>
+                                <div class="h-1 w-4 rounded transition-colors"
+                                     :style="{ background: (chatProcessingStatus.includes('Searching') || chatProcessingStatus.includes('Responding')) ? 'var(--text-accent)' : 'var(--border-secondary)' }"></div>
+                                <div class="h-1 w-4 rounded transition-colors"
+                                     :style="{ background: (chatProcessingStatus.includes('Contextualizing') || chatProcessingStatus.includes('Responding')) ? 'var(--text-accent)' : 'var(--border-secondary)' }"></div>
+                                <div class="h-1 w-4 rounded transition-colors"
+                                     :style="{ background: chatProcessingStatus.includes('Responding') ? 'var(--text-accent)' : 'var(--border-secondary)' }"
+                                     :class="{ 'animate-pulse': chatProcessingStatus.includes('Responding') }"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chat Input Area — uses the .field primitive and
+                     .btn--primary so the input row matches the rest
+                     of the app's send-message patterns instead of a
+                     bespoke px-6 py-3 button. -->
+                <div class="flex-shrink-0 border-t px-4 py-3 sm:px-6 sm:py-4"
+                     style="border-top-color: var(--border-primary); background: var(--bg-secondary);">
+                    <div class="flex gap-2 items-end">
+                        <textarea v-model="inquireChatInput"
+                                  @keydown="handleInquireChatKeydown"
+                                  :placeholder="t('inquire.placeholder')"
+                                  class="field flex-1"
+                                  style="resize: none;"
+                                  rows="2"></textarea>
+                        <button @click="sendInquireChatMessage"
+                                :disabled="!inquireChatInput.trim() || isInquireChatLoading"
+                                class="btn btn--primary btn--icon btn--lg flex-shrink-0">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="t-meta mt-2 flex items-center justify-between">
+                        <span>${t('inquire.sendHint')}</span>
+                        <span class="flex items-center gap-3">
+                            <!-- Context meter: invisible below 50% to avoid
+                                 clutter; past that it shows how full the
+                                 conversation context is, so compaction never
+                                 feels like silent memory loss. -->
+                            <span v-if="contextUsage >= 50" class="flex items-center gap-1.5"
+                                  :title="'Conversation context: ' + contextUsage + '% — older messages are summarized when it fills up'">
+                                <span class="inline-block w-16 h-1 rounded-full overflow-hidden" style="background: var(--bg-tertiary);">
+                                    <span class="block h-full rounded-full"
+                                          :style="{ width: contextUsage + '%', background: 'var(--bg-accent)' }"></span>
+                                </span>
+                                <span v-text="contextUsage + '%'"></span>
+                            </span>
+                            <span v-if="hasActiveFilters" style="color: var(--text-accent);">
+                                <i class="fas fa-filter mr-1"></i>${t('inquire.filtersActive')}
+                            </span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Container — shared partial so the inquire view
+             gets the same below-header positioning as the main app
+             (top: calc(--app-header-height + 16px); right: 16px). -->
+        {% include 'modals/toast-container.html' %}
+
+        <!-- Global Error Banner -->
+        <div v-if="globalError" class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 max-w-lg w-full mx-4">
+            <div class="bg-[var(--bg-danger)] text-white px-4 py-3 rounded-lg shadow-lg flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle mr-3"></i>
+                    <span class="text-sm font-medium">${ globalError }</span>
+                </div>
+                <button @click="globalError = null" class="ml-4 text-white hover:text-gray-200">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        <!-- Color Scheme Modal -->
+        <div v-if="showColorSchemeModal" class="color-scheme-modal" @click.self="closeColorSchemeModal">
+            <div class="color-scheme-modal-content">
+                <div class="color-scheme-header">
+                    <h2 class="color-scheme-title">
+                        <i class="fas fa-palette"></i>
+                        <span v-text="t('colorScheme.title')"></span>
+                    </h2>
+                    <p class="color-scheme-subtitle" v-text="t('colorScheme.subtitle')"></p>
+                </div>
+
+                <div class="color-scheme-body">
+                    <div class="color-scheme-section">
+                        <h3 class="color-scheme-section-title">
+                            <i :class="isDarkMode ? 'fas fa-moon' : 'fas fa-sun'"></i>
+                            <span v-text="isDarkMode ? t('colorScheme.darkThemes') : t('colorScheme.lightThemes')"></span>
+                        </h3>
+                        <div class="color-scheme-grid">
+                            <div v-for="scheme in colorSchemes[isDarkMode ? 'dark' : 'light']"
+                                 :key="scheme.id"
+                                 @click="selectColorScheme(scheme.id)"
+                                 :class="['color-scheme-option', currentColorScheme === scheme.id ? 'active' : '']">
+                                <div class="color-scheme-preview">
+                                    <div :class="`preview-${isDarkMode ? 'dark-' : ''}${scheme.id}-primary color-scheme-preview-segment`"></div>
+                                    <div :class="`preview-${isDarkMode ? 'dark-' : ''}${scheme.id}-secondary color-scheme-preview-segment`"></div>
+                                    <div :class="`preview-${isDarkMode ? 'dark-' : ''}${scheme.id}-tertiary color-scheme-preview-segment`"></div>
+                                </div>
+                                <div class="color-scheme-name" v-text="t('colorScheme.themes.' + (isDarkMode ? 'dark' : 'light') + '.' + scheme.id + '.name')"></div>
+                                <div class="color-scheme-description" v-text="t('colorScheme.themes.' + (isDarkMode ? 'dark' : 'light') + '.' + scheme.id + '.description')"></div>
+                                <div v-if="currentColorScheme === scheme.id" class="color-scheme-check">
+                                    <i class="fas fa-check"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="color-scheme-footer">
+                    <button @click="resetColorScheme" class="color-scheme-reset-btn">
+                        <i class="fas fa-undo mr-2"></i><span v-text="t('colorScheme.resetToDefault')"></span>
+                    </button>
+                    <button @click="closeColorSchemeModal" class="color-scheme-close-btn" v-text="t('common.close')">
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- CSRF Token Management -->
+    <script src="{{ url_for('static', filename='js/csrf-refresh.js') }}"></script>
+    
+    <!-- Shared Components -->
+    <script src="{{ url_for('static', filename='js/shared-components.js') }}"></script>
+    
+    <!-- Inquire Mode Vue App -->
+    <script>
+        const { createApp, ref, reactive, computed, onMounted, onUnmounted, nextTick } = Vue;
+
+        // Initialize i18n
+        let t = (key) => key; // Default fallback
+        
+        async function initializeI18n() {
+            const userLanguage = "{{ user_language }}";
+            
+            // Initialize the global i18n instance
+            if (window.i18n) {
+                await window.i18n.init(userLanguage);
+                
+                // Create a shorthand translation function
+                t = (key, params) => window.i18n.t(key, params);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initializeI18n();
+            // Notifications for the shared header's user menu.
+            const { useNotifications } = await import('/static/js/modules/composables/notifications.js');
+            
+            const csrfToken = ref(document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'));
+            const i18nInstance = window.i18n;
+
+            createApp({
+                setup() {
+                    // --- State ---
+                    const inquireFilters = reactive({
+                        selectedTags: [],
+                        selectedSpeakers: [],
+                        selectedRecordings: [],
+                        dateFrom: null,
+                        dateTo: null
+                    });
+                    
+                    // Search queries for filters
+                    const tagSearchQuery = ref('');
+                    const speakerSearchQuery = ref('');
+                    
+                    // Use shared components
+                    const { isDarkMode, toggleDarkMode, initializeDarkMode } = window.SharedComponents.useDarkMode();
+                    const { 
+                        showColorSchemeModal, 
+                        currentColorScheme, 
+                        colorSchemes,
+                        openColorSchemeModal, 
+                        closeColorSchemeModal, 
+                        selectColorScheme,
+                        resetColorScheme,
+                        applyColorScheme,
+                        initializeColorScheme
+                    } = window.SharedComponents.useColorScheme();
+                    const {
+                        showSharesListModal,
+                        userShares,
+                        isLoadingShares,
+                        openSharesList,
+                        closeSharesList,
+                        copyShareLink,
+                        deleteShare
+                    } = window.SharedComponents.useSharesModal();
+                    const { isUserMenuOpen, toggleUserMenu, closeUserMenu } = window.SharedComponents.useUserMenu();
+                    const isMobileSidebarOpen = ref(false);
+                    
+                    const availableFilters = reactive({
+                        tags: [],
+                        speakers: [],
+                        recordings: []
+                    });
+                    
+                    const inquireChatMessages = ref([]);
+                    const inquireChatInput = ref('');
+                    const isInquireChatLoading = ref(false);
+                    const chatProcessingStatus = ref('');
+                    const showProcessingStatus = ref(false);
+                    // --- Agentic Inquire state (ENABLE_INQUIRE_AGENT beta) ---
+                    // Live tool activity for the in-flight turn; moved onto the
+                    // finished message so provenance persists in the history.
+                    const agentSteps = ref([]);
+                    const answerStarted = ref(false);
+                    // Context accounting: 0-100 estimate from the server, and
+                    // the compaction state. `memory` is the server-produced
+                    // summary of folded turns; `fromIndex` is where verbatim
+                    // history starts in inquireChatMessages; `dividerIndex`
+                    // marks where the "summarized" divider renders.
+                    const contextUsage = ref(0);
+                    const memoryState = reactive({ memory: '', fromIndex: 0, dividerIndex: -1, showMemory: false });
+                    const inquireAbort = ref(null);
+                    const inquireMessagesRef = ref(null);
+                    const globalError = ref(null);
+                    const shouldAutoScroll = ref(true); // Track if we should auto-scroll
+                    const tokenBudget = ref({
+                        has_budget: false,
+                        budget: null,
+                        usage: 0,
+                        percentage: 0
+                    });
+
+                    // --- Computed ---
+                    const hasActiveFilters = computed(() => {
+                        return inquireFilters.selectedTags.length > 0 ||
+                               inquireFilters.selectedSpeakers.length > 0 ||
+                               inquireFilters.selectedRecordings.length > 0 ||
+                               inquireFilters.dateFrom ||
+                               inquireFilters.dateTo;
+                    });
+                    
+                    const filteredTags = computed(() => {
+                        if (!tagSearchQuery.value) return availableFilters.tags;
+                        return availableFilters.tags.filter(tag => 
+                            tag.name.toLowerCase().includes(tagSearchQuery.value.toLowerCase())
+                        );
+                    });
+                    
+                    const filteredSpeakers = computed(() => {
+                        if (!speakerSearchQuery.value) return availableFilters.speakers;
+                        return availableFilters.speakers.filter(speaker => 
+                            speaker.toLowerCase().includes(speakerSearchQuery.value.toLowerCase())
+                        );
+                    });
+
+                    // --- Functions ---
+                    const setGlobalError = (message, duration = 7000) => {
+                        globalError.value = message;
+                        if (duration > 0) {
+                            setTimeout(() => { if (globalError.value === message) globalError.value = null; }, duration);
+                        }
+                    };
+
+                    const loadTokenBudget = async () => {
+                        try {
+                            const response = await fetch('/api/user/token-budget');
+                            if (response.ok) {
+                                tokenBudget.value = await response.json();
+                            }
+                        } catch (error) {
+                            console.error('Error loading token budget:', error);
+                        }
+                    };
+
+                    const loadAvailableFilters = async () => {
+                        try {
+                            const response = await fetch('/api/inquire/available_filters');
+                            if (response.ok) {
+                                const data = await response.json();
+                                availableFilters.tags = data.tags;
+                                availableFilters.speakers = data.speakers;
+                                availableFilters.recordings = data.recordings;
+                            }
+                        } catch (error) {
+                            console.error('Error loading available filters:', error);
+                        }
+                    };
+
+                    // Rewrite citation links into numbered chips plus a
+                    // trailing Sources list. The model emits
+                    // [Title @ m:ss](/recordings/<id>?t=s); repeating the full
+                    // title on every chip is noisy, so chips become
+                    // "<n> @ m:ss" (full title on hover), numbered by first
+                    // appearance per unique recording, with one Sources entry
+                    // per recording at the end. Deterministic here rather than
+                    // trusting the model to number consistently.
+                    const decorateCitations = (html, message) => {
+                        try {
+                            const tpl = document.createElement('template');
+                            tpl.innerHTML = html;
+                            const links = [...tpl.content.querySelectorAll('a[href^="/recordings/"]')];
+                            if (!links.length) return html;
+                            const fmtSeconds = (s) => {
+                                s = Math.max(0, Math.floor(s));
+                                const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+                                return h > 0
+                                    ? h + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0')
+                                    : m + ':' + String(sec).padStart(2, '0');
+                            };
+                            const refs = new Map(); // recording id -> {n, title, href}
+                            for (const a of links) {
+                                const href = a.getAttribute('href') || '';
+                                const m = href.match(/^\/recordings\/(\d+)/);
+                                if (!m) continue;
+                                const recId = m[1];
+                                const raw = (a.textContent || '').trim();
+                                // Timestamp truth is the href's seek param; the
+                                // link text is only a fallback (the model
+                                // sometimes writes raw seconds like "@ 1317"
+                                // instead of the formatted time).
+                                const tm = raw.match(/@\s*(\d+(?::\d{1,2}){0,2})\s*$/);
+                                let seconds = null;
+                                const th = href.match(/[?&]t=(\d+)/);
+                                if (th) {
+                                    seconds = parseInt(th[1], 10);
+                                } else if (tm) {
+                                    const parts = tm[1].split(':').map(Number);
+                                    seconds = parts.reduce((acc, p) => acc * 60 + p, 0);
+                                }
+                                const title = (tm ? raw.slice(0, tm.index) : raw).trim() || ('Recording ' + recId);
+                                if (!refs.has(recId)) {
+                                    refs.set(recId, { n: refs.size + 1, title: title, href: '/recordings/' + recId });
+                                }
+                                const entry = refs.get(recId);
+                                if (title.length > entry.title.length) entry.title = title;
+                                a.textContent = seconds !== null ? (entry.n + ' @ ' + fmtSeconds(seconds)) : String(entry.n);
+                                a.setAttribute('title', entry.title);
+                            }
+                            if (message) {
+                                // Persist the displayed numbering so follow-up
+                                // turns can resolve "tell me more about 5":
+                                // this mapping is sent back with the history.
+                                message.sources = [...refs.entries()].map(([id, e]) => ({ n: e.n, recording_id: Number(id), title: e.title }));
+                            }
+                            // Backstop: strip leaked system-record notes if the
+                            // model ever echoes them ("[citations in this answer
+                            // were displayed...]", "[research performed...]").
+                            [...tpl.content.querySelectorAll('p')].forEach(p => {
+                                const txt = p.textContent.trim();
+                                if (/^\[(citations in this answer|research performed|note about the assistant)/i.test(txt) && txt.endsWith(']')) {
+                                    p.remove();
+                                }
+                            });
+                            // Strip a model-written trailing Sources/References
+                            // section (the interface appends its own). Removed
+                            // ONLY when everything after the heading is bare
+                            // citation links — real prose is never dropped.
+                            const topNodes = [...tpl.content.children];
+                            for (let i = topNodes.length - 1; i >= 0; i--) {
+                                const el = topNodes[i];
+                                const headingish = /^H[1-6]$/.test(el.tagName) ||
+                                    (el.tagName === 'P' && el.children.length === 1 &&
+                                     el.firstElementChild && el.firstElementChild.tagName === 'STRONG' &&
+                                     el.firstElementChild.textContent.trim() === el.textContent.trim());
+                                if (!headingish) continue;
+                                if (!/^(sources?|references?|quellen|fuentes|fontes|источники|来源)\s*:?$/i.test(el.textContent.trim())) continue;
+                                const tail = topNodes.slice(i + 1);
+                                const onlyCitations = tail.every(node => {
+                                    const clone = node.cloneNode(true);
+                                    clone.querySelectorAll('a[href^="/recordings/"]').forEach(a => a.remove());
+                                    return clone.textContent.replace(/[\d\s.,;:()\[\]@–—-]+/g, '') === '';
+                                });
+                                if (onlyCitations) {
+                                    tail.forEach(node => node.remove());
+                                    el.remove();
+                                }
+                                break;
+                            }
+                            if (refs.size) {
+                                const wrap = document.createElement('div');
+                                wrap.className = 'citation-refs';
+                                const label = document.createElement('div');
+                                label.className = 'citation-refs__label';
+                                const tSources = t('inquire.sources');
+                                label.textContent = tSources !== 'inquire.sources' ? tSources : 'Sources';
+                                wrap.appendChild(label);
+                                const ol = document.createElement('ol');
+                                for (const entry of refs.values()) {
+                                    const li = document.createElement('li');
+                                    const link = document.createElement('a');
+                                    link.href = entry.href;
+                                    link.textContent = entry.title;
+                                    li.appendChild(link);
+                                    ol.appendChild(li);
+                                }
+                                wrap.appendChild(ol);
+                                tpl.content.appendChild(wrap);
+                            }
+                            return tpl.innerHTML;
+                        } catch (e) {
+                            return html;
+                        }
+                    };
+
+                    const stopInquireChat = () => {
+                        // Aborting the fetch closes the SSE stream; the server
+                        // agent loop stops between steps when the client goes away.
+                        if (inquireAbort.value) inquireAbort.value.abort();
+                    };
+
+                    const sendInquireChatMessage = async () => {
+                        if (!inquireChatInput.value.trim() || isInquireChatLoading.value) return;
+
+                        const userMessage = inquireChatInput.value.trim();
+                        inquireChatMessages.value.push({ role: 'user', content: userMessage, html: userMessage });
+                        inquireChatInput.value = '';
+                        isInquireChatLoading.value = true;
+                        showProcessingStatus.value = true;
+                        chatProcessingStatus.value = 'Initializing...';
+                        agentSteps.value = [];
+                        answerStarted.value = false;
+
+                        // Always scroll to bottom when user sends a message
+                        shouldAutoScroll.value = true;
+                        await nextTick();
+                        scrollToBottom();
+
+                        // Verbatim history starts at fromIndex (earlier turns
+                        // live in memoryState.memory after compaction). The
+                        // sent length is needed to map the server's keep_last
+                        // back to an index in the full message list.
+                        const sentHistory = inquireChatMessages.value
+                            .slice(memoryState.fromIndex, -1)
+                            .filter(m => m.role === 'user' || m.role === 'assistant')
+                            .map(m => ({ role: m.role, content: m.content, activity: m.activitySummary || undefined, sources: (m.sources && m.sources.length) ? m.sources : undefined }));
+                        const sentFromIndex = memoryState.fromIndex;
+                        const controller = new AbortController();
+                        inquireAbort.value = controller;
+
+                        try {
+                            const response = await fetch('/api/inquire/chat', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': csrfToken.value
+                                },
+                                signal: controller.signal,
+                                body: JSON.stringify({
+                                    message: userMessage,
+                                    message_history: sentHistory,
+                                    conversation_memory: memoryState.memory || undefined,
+                                    filter_tags: inquireFilters.selectedTags,
+                                    filter_speakers: inquireFilters.selectedSpeakers,
+                                    filter_recording_ids: inquireFilters.selectedRecordings,
+                                    filter_date_from: inquireFilters.dateFrom,
+                                    filter_date_to: inquireFilters.dateTo,
+                                    context_chunks: 8
+                                })
+                            });
+
+                            if (!response.ok) {
+                                throw new Error('Chat request failed');
+                            }
+
+                            // Handle streaming response
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let assistantMessage = reactive({ role: 'assistant', content: '', html: '', steps: [], activitySummary: '', showSteps: false });
+                            let messageAdded = false;
+
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
+
+                                const chunk = decoder.decode(value, { stream: true });
+                                const lines = chunk.split('\n');
+
+                                for (const line of lines) {
+                                    if (line.startsWith('data: ')) {
+                                        try {
+                                            const data = JSON.parse(line.slice(6));
+                                            if (data.status && data.message) {
+                                                // Update processing status
+                                                chatProcessingStatus.value = data.message;
+                                            } else if (data.agent_step) {
+                                                // Upsert by id: 'running' first, then the
+                                                // completion state with the result detail.
+                                                const step = data.agent_step;
+                                                const existing = agentSteps.value.find(s => s.id === step.id);
+                                                if (existing) Object.assign(existing, step);
+                                                else agentSteps.value.push(step);
+                                                showProcessingStatus.value = false;
+                                                await nextTick();
+                                                scrollToBottom();
+                                            } else if (data.context_usage !== undefined) {
+                                                contextUsage.value = data.context_usage;
+                                            } else if (data.context_compacted) {
+                                                // Older turns were folded into a memory block.
+                                                // Verbatim history now starts keep_last messages
+                                                // from the end of what we sent.
+                                                const kept = data.context_compacted.keep_last || 0;
+                                                memoryState.memory = data.context_compacted.memory || '';
+                                                const newFrom = Math.max(sentFromIndex, inquireChatMessages.value.length - 1 - kept);
+                                                memoryState.fromIndex = newFrom;
+                                                memoryState.dividerIndex = newFrom;
+                                            } else if (data.conversation_memory) {
+                                                memoryState.memory = data.conversation_memory;
+                                            } else if (data.agent_summary) {
+                                                assistantMessage.activitySummary = data.agent_summary.line || '';
+                                                assistantMessage.agentStepCount = data.agent_summary.steps || 0;
+                                            } else if (data.thinking) {
+                                                // Surfaced reasoning: keep the latest status text
+                                                // visible but do not render into the answer.
+                                                chatProcessingStatus.value = 'Thinking...';
+                                            } else if (data.delta) {
+                                                // Hide status and start showing response
+                                                if (!messageAdded) {
+                                                    inquireChatMessages.value.push(assistantMessage);
+                                                    messageAdded = true;
+                                                    showProcessingStatus.value = false;
+                                                    answerStarted.value = true;
+                                                    // Attach the activity timeline to the message
+                                                    // so provenance persists after the turn.
+                                                    assistantMessage.steps = agentSteps.value;
+                                                }
+                                                assistantMessage.content += data.delta;
+                                                assistantMessage.html = decorateCitations(window.renderMarkdownSafe(assistantMessage.content), assistantMessage);
+                                                // Smart scroll during streaming
+                                                await nextTick();
+                                                scrollToBottom();
+                                            } else if (data.end_of_stream) {
+                                                // Flag output-token-limit truncation instead of
+                                                // presenting the partial answer as complete (issue #349).
+                                                if (data.truncated && messageAdded && assistantMessage.content) {
+                                                    assistantMessage.content += `\n\n_⚠️ ${t('chat.responseTruncated')}_`;
+                                                    assistantMessage.html = decorateCitations(window.renderMarkdownSafe(assistantMessage.content), assistantMessage);
+                                                }
+                                                return;
+                                            } else if (data.error) {
+                                                if (data.budget_exceeded) {
+                                                    throw new Error(t('adminDashboard.tokenBudgetExceeded'));
+                                                }
+                                                throw new Error(data.error);
+                                            }
+                                        } catch (parseError) {
+                                            if (parseError instanceof SyntaxError) {
+                                                console.warn('Failed to parse SSE data:', line);
+                                            } else {
+                                                throw parseError;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            if (error && error.name === 'AbortError') {
+                                // User pressed Stop: keep whatever streamed so far.
+                                console.info('Inquire chat stopped by user');
+                            } else {
+                                console.error('Error in inquire chat:', error);
+                                setGlobalError(error.message || 'Chat failed. Please try again.', 10000);
+                            }
+                        } finally {
+                            isInquireChatLoading.value = false;
+                            showProcessingStatus.value = false;
+                            inquireAbort.value = null;
+                            agentSteps.value = [];
+                            loadTokenBudget(); // Refresh token usage after chat
+                            await nextTick();
+                            scrollToBottom(); // Use smart scrolling
+                        }
+                    };
+
+                    const handleInquireChatKeydown = (event) => {
+                        if (event.key === 'Enter') {
+                            if (event.ctrlKey || event.shiftKey) {
+                                return;
+                            } else {
+                                event.preventDefault();
+                                sendInquireChatMessage();
+                            }
+                        }
+                    };
+
+                    const clearInquireFilters = () => {
+                        inquireFilters.selectedTags = [];
+                        inquireFilters.selectedSpeakers = [];
+                        inquireFilters.selectedRecordings = [];
+                        inquireFilters.dateFrom = null;
+                        inquireFilters.dateTo = null;
+                        inquireChatMessages.value = [];
+                        // New conversation: drop the agent's memory/compaction state.
+                        memoryState.memory = '';
+                        memoryState.fromIndex = 0;
+                        memoryState.dividerIndex = -1;
+                        memoryState.showMemory = false;
+                        contextUsage.value = 0;
+                    };
+                    
+                    const formatDate = (dateString) => {
+                        if (!dateString) return '';
+                        // meeting_date is naive UTC — parse via the instant
+                        // convention so the date renders in the viewer's timezone
+                        let s = dateString;
+                        if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) && !/(?:Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+                            s = s.replace(' ', 'T') + 'Z';
+                        }
+                        const date = new Date(s);
+                        return date.toLocaleDateString();
+                    };
+
+                    // For INSTANT timestamps (e.g. share created_at): backend sends
+                    // naive UTC, so append 'Z' to read it as UTC and render local.
+                    const formatInstant = (dateString) => {
+                        if (!dateString) return '';
+                        let s = dateString;
+                        if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) && !/(?:Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+                            s = s.replace(' ', 'T') + 'Z';
+                        }
+                        const date = new Date(s);
+                        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    };
+
+                    // Smart scrolling functions
+                    const isNearBottom = () => {
+                        if (!inquireMessagesRef.value) return true;
+                        const container = inquireMessagesRef.value;
+                        const threshold = 100; // pixels from bottom
+                        return container.scrollTop + container.clientHeight >= container.scrollHeight - threshold;
+                    };
+                    
+                    const scrollToBottom = () => {
+                        if (inquireMessagesRef.value && shouldAutoScroll.value) {
+                            inquireMessagesRef.value.scrollTop = inquireMessagesRef.value.scrollHeight;
+                        }
+                    };
+                    
+                    const handleScroll = () => {
+                        if (inquireMessagesRef.value) {
+                            shouldAutoScroll.value = isNearBottom();
+                        }
+                    };
+                    
+
+                    // --- Theme Management (from main app.js) ---
+                    const applyThemeFromStorage = () => {
+                        const savedDarkMode = localStorage.getItem('darkMode');
+                        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                        const isDark = savedDarkMode !== null ? savedDarkMode === 'true' : prefersDark;
+
+                        document.documentElement.classList.toggle('dark', isDark);
+
+                        const savedScheme = localStorage.getItem('colorScheme') || 'blue';
+                        const currentMode = isDark ? 'dark' : 'light';
+                        const themeClass = savedScheme === 'blue' ? '' : `theme-${currentMode}-${savedScheme}`;
+
+                        // Remove all existing theme classes
+                        document.documentElement.className = document.documentElement.className
+                            .replace(/theme-(?:light|dark)-\w+/g, '');
+
+                        if (themeClass) {
+                            document.documentElement.classList.add(themeClass);
+                        }
+                    };
+
+                    /**
+                     * Set up global click handler to close dropdowns when clicking outside
+                     * Provides elegant UX by closing menus when users click elsewhere
+                     */
+                    const setupGlobalClickHandler = () => {
+                        document.addEventListener('click', (event) => {
+                            const target = event.target;
+
+                            // Close user menu if clicking outside of it
+                            if (isUserMenuOpen.value) {
+                                const userMenuButton = target.closest('[data-user-menu-toggle]');
+                                const userMenuDropdown = target.closest('[data-user-menu-dropdown]');
+
+                                if (!userMenuButton && !userMenuDropdown) {
+                                    isUserMenuOpen.value = false;
+                                }
+                            }
+                        });
+                    };
+
+                    // --- Lifecycle ---
+                    onMounted(async () => {
+                        // Initialize dark mode and color scheme
+                        initializeDarkMode();
+                        initializeColorScheme(isDarkMode.value);
+                        setupGlobalClickHandler();
+                        
+                        // Watch dark mode changes to update color scheme
+                        Vue.watch(isDarkMode, (newValue) => {
+                            initializeColorScheme(newValue);
+                        });
+                        
+                        // Apply theme from localStorage on page load
+                        applyThemeFromStorage();
+                        
+                        loadAvailableFilters();
+                        loadTokenBudget();
+
+                        // Add scroll listener for smart auto-scroll after DOM is ready
+                        await nextTick();
+                        if (inquireMessagesRef.value) {
+                            inquireMessagesRef.value.addEventListener('scroll', handleScroll);
+                        }
+                    });
+                    
+                    onUnmounted(() => {
+                        if (inquireMessagesRef.value) {
+                            inquireMessagesRef.value.removeEventListener('scroll', handleScroll);
+                        }
+                    });
+
+                    const headerNotifications = useNotifications({}, {
+                        t: (key, params) => i18nInstance ? i18nInstance.t(key, params) : key,
+                    });
+                    onMounted(() => headerNotifications.startNotificationPolling());
+
+                    return {
+                        // i18n - bind to i18n instance to maintain context
+                        t: (key, params) => i18nInstance ? i18nInstance.t(key, params) : key,
+
+                        // Shared header controls (components/header-controls.html)
+                        ...headerNotifications,
+                        switchToUploadView: () => { window.location.href = '/?upload=1'; },
+                        showInstallButton: false,
+                        isPWAInstalled: true,
+                        promptInstall: () => {},
+                        
+                        // State
+                        inquireFilters,
+                        availableFilters,
+                        inquireChatMessages,
+                        inquireChatInput,
+                        isInquireChatLoading,
+                        agentSteps,
+                        answerStarted,
+                        contextUsage,
+                        memoryState,
+                        stopInquireChat,
+                        inquireMessagesRef,
+                        globalError,
+                        tokenBudget,
+                        isUserMenuOpen,
+                        isMobileSidebarOpen,
+                        chatProcessingStatus,
+                        showProcessingStatus,
+                        tagSearchQuery,
+                        speakerSearchQuery,
+                        
+                        // Dark Mode
+                        isDarkMode,
+                        toggleDarkMode,
+                        
+                        // Color Scheme
+                        showColorSchemeModal,
+                        currentColorScheme,
+                        colorSchemes,
+                        openColorSchemeModal,
+                        closeColorSchemeModal,
+                        selectColorScheme,
+                        resetColorScheme,
+                        
+                        // Shares Modal
+                        showSharesListModal,
+                        userShares,
+                        isLoadingShares,
+                        openSharesList,
+                        closeSharesList,
+                        copyShareLink,
+                        deleteShare,
+                        
+                        // Computed
+                        hasActiveFilters,
+                        filteredTags,
+                        filteredSpeakers,
+                        
+                        // Functions
+                        sendInquireChatMessage,
+                        handleInquireChatKeydown,
+                        clearInquireFilters,
+                        loadAvailableFilters,
+                        setGlobalError,
+                        formatDate,
+                        formatInstant,
+                        handleScroll
+                    };
+                },
+                delimiters: ['${', '}']
+            }).mount('#inquire-app');
+
+            // Hide loading overlay after app mounts
+            Vue.nextTick(() => {
+                if (window.AppLoader) {
+                    AppLoader.waitForReady();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

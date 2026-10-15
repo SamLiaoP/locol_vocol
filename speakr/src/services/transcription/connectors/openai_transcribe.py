@@ -1,0 +1,372 @@
+"""
+OpenAI GPT-4o Transcribe connector.
+
+Supports the newer GPT-4o based transcription models:
+- gpt-4o-transcribe: High quality transcription
+- gpt-4o-mini-transcribe: Cost-effective transcription
+- gpt-4o-transcribe-diarize: Speaker diarization with labels A, B, C, D
+"""
+
+import logging
+import httpx
+from openai import OpenAI
+from typing import Dict, Any, Set, Optional
+
+from ..base import (
+    BaseTranscriptionConnector,
+    TranscriptionCapability,
+    TranscriptionRequest,
+    TranscriptionResponse,
+    TranscriptionSegment,
+    ConnectorSpecifications,
+)
+from ..exceptions import TranscriptionError, ConfigurationError
+
+logger = logging.getLogger(__name__)
+
+
+class OpenAITranscribeConnector(BaseTranscriptionConnector):
+    """Connector for GPT-4o Transcribe models with optional diarization support."""
+
+    # Base capabilities - diarization added dynamically based on model
+    CAPABILITIES: Set[TranscriptionCapability] = {
+        TranscriptionCapability.TIMESTAMPS,
+        TranscriptionCapability.LANGUAGE_DETECTION,
+        # Hotwords + initial_prompt are concatenated into OpenAI's free-text
+        # `prompt` parameter for non-diarize models. The diarize model
+        # (gpt-4o-transcribe-diarize) silently ignores both -- handled with
+        # a UI help note rather than a per-model capability split.
+        TranscriptionCapability.HOTWORDS,
+        TranscriptionCapability.INITIAL_PROMPT,
+    }
+    PROVIDER_NAME = "openai_transcribe"
+
+    # GPT-4o Transcribe models have specific constraints
+    # - 25MB file size limit (all models)
+    # - Duration limits vary by model:
+    #   - gpt-4o-transcribe / gpt-4o-mini-transcribe: 1500 seconds (25 min)
+    #   - gpt-4o-transcribe-diarize: 1400 seconds (~23 min)
+    # - chunking_strategy="auto" handles files internally up to the duration limit
+    # Supported formats: mp3, mp4, mpeg, mpga, m4a, wav, webm, flac, ogg, oga
+    # NOT supported: opus (used by WhatsApp voice notes, Discord)
+
+    # Default specifications (will be overridden per-model in __init__)
+    SPECIFICATIONS = ConnectorSpecifications(
+        max_file_size_bytes=25 * 1024 * 1024,  # 25MB
+        max_duration_seconds=1400,  # Default to most restrictive (diarize model)
+        min_duration_for_chunking=30,  # >30s needs chunking_strategy param
+        handles_chunking_internally=False,  # App must chunk files > max_duration_seconds
+        requires_chunking_param=True,  # Must send chunking_strategy for >30s
+        recommended_chunk_seconds=1200,  # 20 minutes - safe margin
+        unsupported_codecs=frozenset({'opus'}),  # OpenAI API doesn't support opus
+    )
+
+    # Models and their capabilities with duration limits
+    MODELS = {
+        'gpt-4o-transcribe': {
+            'supports_diarization': False,
+            'max_duration_seconds': 1500,  # 25 minutes
+            'recommended_chunk_seconds': 1200,  # 20 minutes
+            'description': 'High quality transcription'
+        },
+        'gpt-4o-mini-transcribe': {
+            'supports_diarization': False,
+            'max_duration_seconds': 1500,  # 25 minutes
+            'recommended_chunk_seconds': 1200,  # 20 minutes
+            'description': 'Cost-effective transcription'
+        },
+        'gpt-4o-mini-transcribe-2025-12-15': {
+            'supports_diarization': False,
+            'max_duration_seconds': 1500,  # 25 minutes
+            'recommended_chunk_seconds': 1200,  # 20 minutes
+            'description': 'Cost-effective transcription (dated version)'
+        },
+        'gpt-4o-transcribe-diarize': {
+            'supports_diarization': True,
+            'max_duration_seconds': 1400,  # ~23 minutes (more restrictive)
+            'recommended_chunk_seconds': 1200,  # 20 minutes
+            'description': 'Speaker diarization with labels A, B, C, D'
+        },
+        'whisper-1': {
+            'supports_diarization': False,
+            'max_duration_seconds': 1500,  # 25 minutes (same 25MB API limit)
+            'recommended_chunk_seconds': 1200,  # 20 minutes
+            'description': 'Legacy Whisper API (no diarization)'
+        }
+    }
+
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the GPT-4o Transcribe connector.
+
+        Args:
+            config: Configuration dict with keys:
+                - api_key: OpenAI API key (required)
+                - base_url: API base URL (default: https://api.openai.com/v1)
+                - model: Model name (required, one of MODELS)
+                - http_client: Optional httpx.Client instance
+        """
+        # Store model before calling super().__init__ since _validate_config needs it
+        self.model = config.get('model', 'gpt-4o-transcribe')
+
+        # Set model-specific specifications (override class defaults)
+        # Use SPECIFICATIONS (uppercase) to shadow the class attribute
+        model_info = self.MODELS.get(self.model, {})
+        self.SPECIFICATIONS = ConnectorSpecifications(
+            max_file_size_bytes=25 * 1024 * 1024,  # 25MB (same for all)
+            max_duration_seconds=model_info.get('max_duration_seconds', 1400),
+            min_duration_for_chunking=30,
+            handles_chunking_internally=False,
+            requires_chunking_param=True,
+            recommended_chunk_seconds=model_info.get('recommended_chunk_seconds', 1200),
+            unsupported_codecs=frozenset({'opus'}),
+        )
+
+        super().__init__(config)
+
+        # Set up HTTP client with custom headers
+        http_client = config.get('http_client')
+        if not http_client:
+            app_headers = {
+                "HTTP-Referer": "https://github.com/murtaza-nasir/speakr",
+                "X-Title": "Speakr - AI Audio Transcription",
+                "User-Agent": "Speakr/1.0 (https://github.com/murtaza-nasir/speakr)"
+            }
+            http_client = httpx.Client(verify=True, headers=app_headers)
+
+        self.client = OpenAI(
+            api_key=config['api_key'],
+            base_url=config.get('base_url', 'https://api.openai.com/v1'),
+            http_client=http_client
+        )
+
+        # Dynamically update capabilities based on model
+        if self._model_supports_diarization():
+            self.CAPABILITIES = self.CAPABILITIES | {
+                TranscriptionCapability.DIARIZATION,
+                TranscriptionCapability.KNOWN_SPEAKERS
+            }
+
+    def _validate_config(self) -> None:
+        """Validate required configuration."""
+        if not self.config.get('api_key'):
+            raise ConfigurationError("api_key is required for OpenAI Transcribe connector")
+
+        model = self.config.get('model', 'gpt-4o-transcribe')
+        if model not in self.MODELS:
+            raise ConfigurationError(
+                f"Unknown model: {model}. Valid models: {list(self.MODELS.keys())}"
+            )
+
+    def _model_supports_diarization(self) -> bool:
+        """Check if the current model supports diarization."""
+        model_info = self.MODELS.get(self.model, {})
+        return model_info.get('supports_diarization', False)
+
+    def transcribe(self, request: TranscriptionRequest) -> TranscriptionResponse:
+        """
+        Transcribe audio using GPT-4o Transcribe API.
+
+        Args:
+            request: Standardized transcription request
+
+        Returns:
+            TranscriptionResponse, with segments if using diarization model
+        """
+        try:
+            effective_model = self._effective_model(request) or self.model
+            # Validate the per-request override against this connector's known
+            # model whitelist; fall back silently if the override is unknown.
+            if effective_model not in self.MODELS:
+                logger.warning(
+                    f"Per-request model override {effective_model!r} is not in this connector's MODELS map; "
+                    f"falling back to configured default {self.model!r}"
+                )
+                effective_model = self.model
+            params = {
+                "model": effective_model,
+                "file": request.audio_file,
+            }
+
+            if request.language:
+                params["language"] = request.language
+                logger.info(f"Using transcription language: {request.language}")
+
+            # Handle diarization model specifics
+            if effective_model == 'gpt-4o-transcribe-diarize':
+                # Required: chunking_strategy for audio > 30 seconds
+                params["chunking_strategy"] = "auto"
+
+                if request.diarize:
+                    params["response_format"] = "diarized_json"
+                    logger.info("Using diarized_json response format for speaker diarization")
+
+                    # Known speaker support for maintaining speaker identity across chunks
+                    # known_speaker_names is a list of speaker labels (e.g., ["A", "B"])
+                    # known_speaker_references is a dict mapping label to data URL
+                    if request.known_speaker_names and request.known_speaker_references:
+                        # OpenAI expects lists for both parameters
+                        speaker_names = []
+                        speaker_refs = []
+
+                        for name in request.known_speaker_names:
+                            if name in request.known_speaker_references:
+                                speaker_names.append(name)
+                                speaker_refs.append(request.known_speaker_references[name])
+
+                        if speaker_names:
+                            # Use extra_body to pass the known speaker parameters
+                            params["extra_body"] = {
+                                "known_speaker_names": speaker_names,
+                                "known_speaker_references": speaker_refs
+                            }
+                            logger.info(f"Using known speaker references for {len(speaker_names)} speakers: {speaker_names}")
+            else:
+                # Non-diarization models - combine initial prompt and hotwords
+                prompt_parts = []
+                if request.prompt:
+                    prompt_parts.append(request.prompt)
+                if request.hotwords:
+                    prompt_parts.append(request.hotwords)
+                if prompt_parts:
+                    params["prompt"] = ". ".join(prompt_parts)
+
+            logger.info(f"Sending request to GPT-4o Transcribe API with model: {effective_model}")
+            response = self.client.audio.transcriptions.create(**params)
+
+            # Parse response based on format
+            if effective_model == 'gpt-4o-transcribe-diarize' and request.diarize:
+                return self._parse_diarized_response(response, effective_model)
+            else:
+                return self._parse_text_response(response, effective_model)
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"GPT-4o transcription failed: {error_msg}")
+            raise TranscriptionError(f"GPT-4o transcription failed: {error_msg}") from e
+
+    def _parse_text_response(self, response, model_used: Optional[str] = None) -> TranscriptionResponse:
+        """Parse a plain text response."""
+        text = response.text if hasattr(response, 'text') else str(response)
+        return TranscriptionResponse(
+            text=text,
+            provider=self.PROVIDER_NAME,
+            model=model_used or self.model
+        )
+
+    def _parse_diarized_response(self, response, model_used: Optional[str] = None) -> TranscriptionResponse:
+        """
+        Parse diarized JSON response into standardized format.
+
+        The diarized_json response contains segments with:
+        - speaker: "A", "B", "C", "D" etc.
+        - text: The transcribed text
+        - start: Segment start time
+        - end: Segment end time
+        """
+        segments = []
+        speakers = set()
+        full_text_parts = []
+
+        # Handle response object - could be dict or object with attributes
+        if hasattr(response, 'segments'):
+            raw_segments = response.segments
+        elif isinstance(response, dict) and 'segments' in response:
+            raw_segments = response['segments']
+        else:
+            # Fallback to text-only response
+            logger.warning("No segments found in diarized response, falling back to text")
+            return self._parse_text_response(response)
+
+        for seg in raw_segments:
+            # Handle both dict and object segments
+            if isinstance(seg, dict):
+                speaker = seg.get('speaker', 'Unknown')
+                text = seg.get('text', '')
+                start = seg.get('start')
+                end = seg.get('end')
+            else:
+                speaker = getattr(seg, 'speaker', 'Unknown')
+                text = getattr(seg, 'text', '')
+                start = getattr(seg, 'start', None)
+                end = getattr(seg, 'end', None)
+
+            # Skip empty segments
+            if not text or not text.strip():
+                continue
+
+            speakers.add(speaker)
+            full_text_parts.append(f"[{speaker}]: {text}")
+
+            segments.append(TranscriptionSegment(
+                text=text,
+                speaker=speaker,
+                start_time=start,
+                end_time=end
+            ))
+
+        # Always use our formatted text with speaker labels for diarized responses
+        # OpenAI's response.text is plain text WITHOUT speaker labels
+        full_text = '\n'.join(full_text_parts)
+
+        logger.info(f"Parsed {len(segments)} segments with {len(speakers)} unique speakers: {sorted(speakers)}")
+
+        return TranscriptionResponse(
+            text=full_text,
+            segments=segments,
+            speakers=sorted(list(speakers)),
+            provider=self.PROVIDER_NAME,
+            model=model_used or self.model,
+            raw_response=response if isinstance(response, dict) else None
+        )
+
+    def list_models(self):
+        """Return audio-transcription-relevant models from /v1/models.
+
+        Filters to ids containing 'transcribe' or 'whisper' so the dropdown
+        only offers models that can actually run audio transcription.
+        """
+        try:
+            resp = self.client.models.list()
+            audio = []
+            for m in resp.data:
+                mid = getattr(m, 'id', '')
+                if mid and ('transcribe' in mid.lower() or 'whisper' in mid.lower()):
+                    audio.append({
+                        'id': mid,
+                        'label': mid,
+                        'owned_by': getattr(m, 'owned_by', 'openai'),
+                    })
+            return audio
+        except Exception as e:
+            logger.warning(f"openai_transcribe /v1/models probe failed: {e}")
+            return []
+
+    def health_check(self) -> bool:
+        """Check if the connector is properly configured."""
+        return bool(self.config.get('api_key'))
+
+    @classmethod
+    def get_config_schema(cls) -> Dict[str, Any]:
+        """Return JSON schema for configuration."""
+        return {
+            "type": "object",
+            "required": ["api_key"],
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "description": "OpenAI API key"
+                },
+                "base_url": {
+                    "type": "string",
+                    "default": "https://api.openai.com/v1",
+                    "description": "API base URL"
+                },
+                "model": {
+                    "type": "string",
+                    "enum": list(cls.MODELS.keys()),
+                    "default": "gpt-4o-transcribe",
+                    "description": "GPT-4o transcription model to use"
+                }
+            }
+        }

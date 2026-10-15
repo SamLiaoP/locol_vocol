@@ -1,0 +1,50 @@
+<!-- Mobile Events Panel. Calendar-export button moved into the
+     mobile-header's contextual toolbar so this panel now drops
+     straight into its event list. -->
+<div v-if="mobileTab === 'events' && selectedRecording.events && selectedRecording.events.length > 0" class="h-full flex flex-col">
+    <div class="flex-grow overflow-y-auto px-3 py-3 space-y-3">
+        <div v-for="event in selectedRecording.events" :key="event.id"
+             class="bg-[var(--bg-tertiary)] rounded-md p-3 border border-[var(--border-primary)]">
+            <div class="flex justify-between items-start mb-2">
+                <div class="flex-1 min-w-0 pr-2">
+                    <h3 class="t-body-strong mb-1">
+                        <i class="fas fa-calendar-check mr-2 text-[var(--text-accent)] text-sm"></i>
+                        ${ event.title }
+                    </h3>
+                    <p v-if="event.description" class="t-meta mb-2">${ event.description }</p>
+                </div>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button @click="downloadEventICS(event)" class="btn btn--sm btn--primary" :title="t('events.addToCalendar')">
+                        <i class="fas fa-download"></i>
+                        <span v-text="t('events.add')"></span>
+                    </button>
+                    <button @click="deleteEvent(event)" class="btn btn--icon btn--sm" :title="t('events.delete')" style="color: var(--text-danger);">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 gap-2 t-meta">
+                <div class="flex items-center">
+                    <i class="fas fa-clock mr-2 text-[var(--text-accent)]"></i>
+                    <span>
+                        ${ formatEventDateTime(event.start_datetime) }
+                        <template v-if="event.end_datetime"> - ${ formatEventDateTime(event.end_datetime, true) }</template>
+                    </span>
+                </div>
+                <div v-if="event.location" class="flex items-center">
+                    <i class="fas fa-map-marker-alt mr-2 text-[var(--text-accent)]"></i>
+                    <span>${ event.location }</span>
+                </div>
+                <div v-if="event.attendees && event.attendees.length > 0" class="flex items-start">
+                    <i class="fas fa-users mr-2 text-[var(--text-accent)] mt-0.5"></i>
+                    <div class="flex-1">
+                        <span v-for="(attendee, index) in event.attendees" :key="index"
+                              class="inline-block bg-[var(--bg-secondary)] px-2 py-0.5 rounded mr-1 mb-1">
+                            ${ attendee }
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

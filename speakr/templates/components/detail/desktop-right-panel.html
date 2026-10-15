@@ -1,0 +1,91 @@
+<!-- Desktop Right Panel (Summary/Notes/Chat) — audio player extracted
+     to a persistent bottom bar (desktop-bottom-player.html) so it
+     spans the full content width and stays anchored at the bottom. -->
+<div id="rightMainColumn" class="flex flex-col overflow-hidden" :style="{width: rightColumnWidth + '%'}">
+
+    <!-- Docked video, top-of-right-column slot (see _video-dock.html). -->
+    {% with dock_pos = 'right-top' %}{% include 'components/detail/_video-dock.html' %}{% endwith %}
+
+    <!-- Right-rail tab strip + per-tab action toolbar (design system v1).
+         One row carries tab navigation on the left and per-tab actions on
+         the right. No card chrome around the content — sections live
+         directly on the rail surface. -->
+    <div :class="{'flex-1': !isChatMaximized, 'flex-none': isChatMaximized}" class="flex flex-col overflow-hidden">
+        <div class="tabs-bar px-4">
+            <div class="tabs">
+                <button @click="selectedTab = 'summary'"
+                        class="tab"
+                        :class="{'is-active': selectedTab === 'summary'}">
+                    <span>${ t('summary.title') }</span>
+                    <span v-if="summaryWordCount" class="tab__count">${ summaryWordCount }</span>
+                </button>
+                <button @click="selectedTab = 'notes'"
+                        class="tab"
+                        :class="{'is-active': selectedTab === 'notes'}">
+                    <span>${ t('notes.title') }</span>
+                    <span v-if="notesWordCount" class="tab__count">${ notesWordCount }</span>
+                </button>
+                <button v-if="hasRecordingStats"
+                        @click="selectedTab = 'stats'"
+                        class="tab"
+                        :class="{'is-active': selectedTab === 'stats'}">
+                    <span>${ t('stats.title') }</span>
+                    <span class="tab__count">${ recordingStats.total.speakers }</span>
+                </button>
+                <button v-if="selectedRecording.events && selectedRecording.events.length > 0"
+                        @click="selectedTab = 'events'"
+                        class="tab"
+                        :class="{'is-active': selectedTab === 'events'}">
+                    <span>${ t('events.title') }</span>
+                    <span class="tab__count">${ selectedRecording.events.length }</span>
+                </button>
+            </div>
+
+            <!-- Per-tab action toolbar. Each tab surfaces its own contextual
+                 actions. While editing, the same slot carries Cancel/Save. -->
+            <div class="tabs-bar__actions">
+                <!-- Summary actions -->
+                <template v-if="selectedTab === 'summary' && selectedRecording.summary">
+                    <template v-if="!editingSummary">
+                        <button class="btn btn--icon" @click="copySummary" :title="t('buttons.copySummary')"><i class="fas fa-copy"></i></button>
+                        <button class="btn btn--icon" @click="downloadSummary" :title="t('buttons.downloadSummary')"><i class="fas fa-download"></i></button>
+                        <button class="btn btn--icon" @click="toggleEditSummary" :title="t('buttons.editSummary')"><i class="fas fa-pen"></i></button>
+                        <button class="btn btn--icon" @click="openCustomizeSummaryModal" :title="t('summary.customizePrompt') || 'Customize prompt'"><i class="fas fa-sliders-h"></i></button>
+                    </template>
+                    <template v-else>
+                        <button class="btn btn--sm btn--ghost" @click="cancelEditSummary">${ t('buttons.cancel') }</button>
+                        <button class="btn btn--sm btn--primary" @click="saveEditSummary">${ t('buttons.save') }</button>
+                    </template>
+                </template>
+
+                <!-- Notes actions -->
+                <template v-else-if="selectedTab === 'notes'">
+                    <template v-if="!editingNotes">
+                        <button v-if="selectedRecording.notes" class="btn btn--icon" @click="copyNotes" :title="t('buttons.copyNotes')"><i class="fas fa-copy"></i></button>
+                        <button v-if="selectedRecording.notes" class="btn btn--icon" @click="downloadNotes" :title="t('buttons.downloadNotes')"><i class="fas fa-download"></i></button>
+                        <button class="btn btn--icon" @click="toggleEditNotes" :title="t('buttons.editNotes')"><i class="fas fa-pen"></i></button>
+                    </template>
+                    <template v-else>
+                        <button class="btn btn--sm btn--ghost" @click="cancelEditNotes">${ t('buttons.cancel') }</button>
+                        <button class="btn btn--sm btn--primary" @click="saveEditNotes">${ t('buttons.save') }</button>
+                    </template>
+                </template>
+            </div>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="flex-1 overflow-hidden">
+            {% include 'components/detail/desktop-summary-tab.html' %}
+            {% include 'components/detail/desktop-notes-tab.html' %}
+            {% include 'components/detail/desktop-stats-tab.html' %}
+            {% include 'components/detail/desktop-events-tab.html' %}
+        </div>
+    </div>
+
+    <!-- Docked video, bottom-of-right-column slot (see _video-dock.html). -->
+    {% with dock_pos = 'right-bottom' %}{% include 'components/detail/_video-dock.html' %}{% endwith %}
+
+    <!-- Chat is no longer inline — it lives in the floating dockable
+         panel (components/detail/floating-chat.html) which is mounted
+         at the detail-view level and teleported to <body>. -->
+</div>

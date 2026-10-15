@@ -1,0 +1,2000 @@
+/* The paper-fold S has a transparent background and stands on its own:
+   no frame, no tint, the same apricot in every theme. */
+.app-logo {
+    object-fit: contain;
+}
+
+/* ============================================================================
+ * Speakr Design System – Primitives
+ * ============================================================================
+ *
+ * Layers a small, opinionated component vocabulary on top of styles.css.
+ * Every primitive obeys these rules:
+ *
+ *   1. One elevated surface per region. Inside a region, structure comes
+ *      from hairline dividers + small uppercase section labels.
+ *   2. Type and weight carry hierarchy. Background colour does not.
+ *   3. Generous outer margins, restrained inner padding.
+ *   4. Every colour reference is a CSS variable so light/dark + all six
+ *      theme variants work without per-rule branching.
+ *
+ * Spacing scale (use these everywhere):
+ *   4 · 8 · 12 · 16 · 24 · 32 · 48 · 64  (also exposed as --sp-1..--sp-8)
+ *
+ * Type scale (token classes are .t-{label,meta,body,body-strong,subhead,heading,title}):
+ *   label       11px / 600 / uppercase / muted
+ *   meta        13px / 400 / muted
+ *   body        14px / 400
+ *   body-strong 14px / 600
+ *   subhead     16px / 600
+ *   heading     20px / 600
+ *   title       28px / 700
+ * ========================================================================= */
+
+
+/* ---- Tokens (additive to styles.css color variables) -------------------- */
+
+:root {
+    /* Spacing scale */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 24px;
+    --sp-6: 32px;
+    --sp-7: 48px;
+    --sp-8: 64px;
+
+    /* Radii */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-pill: 999px;
+
+    /* Elevation (used sparingly; only on floating/dropdown surfaces) */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+
+    /* Type sizes */
+    --fs-label: 11px;
+    --fs-meta: 13px;
+    --fs-body: 14px;
+    --fs-subhead: 16px;
+    --fs-heading: 20px;
+    --fs-title: 28px;
+
+    /* Line heights */
+    --lh-tight: 1.25;
+    --lh-snug: 1.4;
+    --lh-base: 1.55;
+
+    /* Track for letter-spacing on uppercase labels */
+    --tracking-wide: 0.06em;
+
+    /* Border weights */
+    --border-hairline: 1px;
+    --border-strong: 2px;
+
+    /* Transition */
+    --t-fast: 120ms;
+    --t-base: 180ms;
+
+    /* Status tints — semantic, *not* theme-customizable. Status colours
+     * (purple = processing, amber = warning, etc.) carry universal
+     * meaning and should look the same across all themes. The opacity
+     * is just enough to read on either surface tint. Use the pill-*
+     * primitive classes below rather than hardcoding bg-blue-500/15
+     * style Tailwind utilities. */
+    --tint-info:        rgba(59, 130, 246, 0.12);    /* blue */
+    --tint-info-border: rgba(59, 130, 246, 0.30);
+    --tint-info-fg:     rgb(37, 99, 235);
+
+    --tint-success:        rgba(16, 185, 129, 0.12);  /* green */
+    --tint-success-border: rgba(16, 185, 129, 0.30);
+    --tint-success-fg:     rgb(5, 150, 105);
+
+    --tint-warn:        rgba(245, 158, 11, 0.12);     /* amber */
+    --tint-warn-border: rgba(245, 158, 11, 0.30);
+    --tint-warn-fg:     rgb(180, 83, 9);
+
+    --tint-danger:        rgba(239, 68, 68, 0.12);    /* red */
+    --tint-danger-border: rgba(239, 68, 68, 0.30);
+    --tint-danger-fg:     rgb(185, 28, 28);
+
+    --tint-processing:        rgba(168, 85, 247, 0.12); /* purple */
+    --tint-processing-border: rgba(168, 85, 247, 0.30);
+    --tint-processing-fg:     rgb(126, 34, 206);
+
+    --tint-pending:        rgba(234, 179, 8, 0.12);   /* yellow */
+    --tint-pending-border: rgba(234, 179, 8, 0.30);
+    --tint-pending-fg:     rgb(161, 98, 7);
+
+    --tint-incognito:        rgba(139, 92, 246, 0.10); /* violet */
+    --tint-incognito-border: rgba(139, 92, 246, 0.30);
+    --tint-incognito-fg:     rgb(109, 40, 217);
+}
+
+html.dark {
+    /* Slightly more opaque tints + lighter foreground on dark mode so
+     * tinted pills stay legible against the darker surface. */
+    --tint-info:        rgba(96, 165, 250, 0.18);
+    --tint-info-fg:     rgb(147, 197, 253);
+    --tint-success:        rgba(52, 211, 153, 0.18);
+    --tint-success-fg:     rgb(110, 231, 183);
+    --tint-warn:        rgba(251, 191, 36, 0.18);
+    --tint-warn-fg:     rgb(252, 211, 77);
+    --tint-danger:        rgba(248, 113, 113, 0.18);
+    --tint-danger-fg:     rgb(252, 165, 165);
+    --tint-processing:        rgba(192, 132, 252, 0.18);
+    --tint-processing-fg:     rgb(216, 180, 254);
+    --tint-pending:        rgba(250, 204, 21, 0.18);
+    --tint-pending-fg:     rgb(253, 224, 71);
+    --tint-incognito:        rgba(167, 139, 250, 0.15);
+    --tint-incognito-fg:     rgb(196, 181, 253);
+}
+
+html.dark {
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.65);
+}
+
+
+/* ---- Type primitives ---------------------------------------------------- */
+
+.t-label {
+    font-size: var(--fs-label);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-muted);
+    line-height: var(--lh-tight);
+}
+
+.t-meta {
+    font-size: var(--fs-meta);
+    font-weight: 400;
+    color: var(--text-muted);
+    line-height: var(--lh-snug);
+}
+
+.t-body {
+    font-size: var(--fs-body);
+    font-weight: 400;
+    color: var(--text-primary);
+    line-height: var(--lh-base);
+}
+
+.t-body-strong {
+    font-size: var(--fs-body);
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: var(--lh-snug);
+}
+
+.t-subhead {
+    font-size: var(--fs-subhead);
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: var(--lh-snug);
+}
+
+.t-heading {
+    font-size: var(--fs-heading);
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: var(--lh-tight);
+    letter-spacing: -0.01em;
+}
+
+.t-title {
+    font-size: var(--fs-title);
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: var(--lh-tight);
+    letter-spacing: -0.02em;
+}
+
+
+/* ---- Surface primitives -------------------------------------------------
+ *
+ * Two surface variants. That's it.
+ *   .surface         – the base canvas; no border, no shadow
+ *   .surface-raised  – modals, dropdowns, floating panels; subtle elevation
+ * --------------------------------------------------------------------- */
+
+.surface {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.surface-raised {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border: var(--border-hairline) solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+
+/* ---- Section divider + label -------------------------------------------
+ *
+ * .section-label  – the muted uppercase rubric ("SUMMARY · 1.8k")
+ * .section-rule   – the hairline that sits below a region header
+ * ------------------------------------------------------------------- */
+
+.section-label {
+    font-size: var(--fs-label);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    line-height: var(--lh-tight);
+}
+
+.section-label__count {
+    font-size: var(--fs-meta);
+    font-weight: 500;
+    color: var(--text-light, var(--text-muted));
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.section-rule {
+    height: var(--border-hairline);
+    background: var(--border-primary);
+    border: none;
+    margin: 0;
+}
+
+
+/* ---- Tab bar ------------------------------------------------------------
+ *
+ * Used by the right-rail (SUMMARY · NOTES · EVENTS) and the segmented
+ * style of secondary toolbars. Active tab is type weight + accent
+ * underline; never a background fill.
+ *
+ *   <div class="tabs">
+ *     <button class="tab is-active">Summary <span class="tab__count">1.8k</span></button>
+ *     <button class="tab">Notes <span class="tab__count">142</span></button>
+ *   </div>
+ * --------------------------------------------------------------------- */
+
+.tabs {
+    display: flex;
+    align-items: stretch;
+    gap: var(--sp-1);
+    padding: 0;
+    margin: 0;
+    border-bottom: var(--border-hairline) solid var(--border-primary);
+    min-height: 40px;
+}
+
+.tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: var(--fs-body);
+    font-weight: 600;
+    padding: var(--sp-3) var(--sp-3);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    border-bottom: var(--border-strong) solid transparent;
+    margin-bottom: calc(var(--border-hairline) * -1);
+    transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+    line-height: var(--lh-tight);
+    white-space: nowrap;
+}
+
+.tab:hover {
+    color: var(--text-secondary, var(--text-primary));
+}
+
+.tab.is-active {
+    color: var(--text-primary);
+    border-bottom-color: var(--text-accent);
+}
+
+.tab__count {
+    font-size: var(--fs-meta);
+    font-weight: 500;
+    color: var(--text-light, var(--text-muted));
+    background: transparent;
+}
+
+.tab.is-active .tab__count {
+    color: var(--text-muted);
+}
+
+.tab__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--text-accent);
+    animation: pulseDot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+
+/* Tab bar with action toolbar on the right side */
+.tabs-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    border-bottom: var(--border-hairline) solid var(--border-primary);
+    min-height: 40px;
+}
+
+.tabs-bar > .tabs {
+    border-bottom: none;
+    min-height: 0;
+}
+
+.tabs-bar__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    /* No padding-right here — the outer .tabs-bar already provides
+       horizontal padding (typically px-4). Adding more here stacked
+       ~12px on top of the outer 16px, pushing the action icons ~10px
+       further from the right edge than the tab labels sit from the
+       left edge; the result read as inconsistent. */
+}
+
+
+/* ---- Tabs scroller — horizontal-scroll affordance for long tab strips.
+ *
+ * Wraps a .tabs container with overlaid left/right chevron buttons that
+ * appear only when there's content to scroll to in that direction.
+ * Wheel-over-tabs translates vertical scroll to horizontal so the user
+ * doesn't need to use the buttons. The native scrollbar is hidden but
+ * native touch panning still works on mobile.
+ *
+ *   <div class="tabs-scroller" data-tabs-scroller>
+ *     <button class="tabs-scroller__nav tabs-scroller__nav--left"  aria-label="Scroll left"><i class="fas fa-chevron-left"></i></button>
+ *     <nav class="tabs">...</nav>
+ *     <button class="tabs-scroller__nav tabs-scroller__nav--right" aria-label="Scroll right"><i class="fas fa-chevron-right"></i></button>
+ *   </div>
+ *
+ * The auto-init script (see assets/js/tabs-scroller.js or the inline
+ * snippet in page-header.html) attaches the scroll-listener and
+ * resize-observer that toggle .is-visible on the nav buttons.
+ * --------------------------------------------------------------------- */
+
+.tabs-scroller {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    border-bottom: var(--border-hairline) solid var(--border-primary);
+}
+
+.tabs-scroller > .tabs {
+    flex: 1;
+    border-bottom: none;
+    overflow-x: auto;
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;       /* IE 10+ */
+}
+.tabs-scroller > .tabs::-webkit-scrollbar {
+    display: none;                  /* Chromium / Safari */
+}
+
+.tabs-scroller__nav {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40px;
+    z-index: 2;
+    display: none;                  /* shown by .is-visible */
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    transition: color var(--t-fast) ease, transform var(--t-fast) ease;
+    pointer-events: auto;
+}
+.tabs-scroller__nav:hover {
+    color: var(--text-accent);
+    transform: scale(1.12);
+}
+.tabs-scroller__nav.is-visible { display: inline-flex; }
+
+/* Stronger gradient so the chevron sits on a visible "fade" backdrop
+   rather than blending into the page. */
+.tabs-scroller__nav--left  {
+    left: 0;
+    background: linear-gradient(to right,
+        var(--bg-secondary) 0%,
+        var(--bg-secondary) 50%,
+        transparent 100%);
+}
+.tabs-scroller__nav--right {
+    right: 0;
+    background: linear-gradient(to left,
+        var(--bg-secondary) 0%,
+        var(--bg-secondary) 50%,
+        transparent 100%);
+}
+
+
+
+/* ---- Toggle (binary on/off pill) ---------------------------------------- */
+
+.toggle {
+    appearance: none;
+    background: transparent;
+    border: var(--border-hairline) solid var(--border-primary);
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+    font-weight: 500;
+    padding: var(--sp-1) var(--sp-3);
+    height: 28px;
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.toggle:hover {
+    color: var(--text-secondary, var(--text-primary));
+    background: var(--bg-tertiary);
+}
+
+.toggle.is-on {
+    background: var(--text-accent);
+    color: var(--bg-secondary);
+    border-color: var(--text-accent);
+}
+
+.toggle.is-on:hover {
+    opacity: 0.92;
+}
+
+
+/* ---- Button -------------------------------------------------------------
+ *
+ *   .btn                  base
+ *   .btn--primary         filled accent
+ *   .btn--ghost           bordered, no fill
+ *   .btn--danger          filled danger
+ *   .btn--icon            square 32×32 (40×40 on .btn--icon.btn--lg)
+ *   .btn--sm / .btn--lg   size variants
+ * --------------------------------------------------------------------- */
+
+.btn {
+    appearance: none;
+    background: transparent;
+    border: var(--border-hairline) solid transparent;
+    color: var(--text-primary);
+    font-size: var(--fs-body);
+    font-weight: 500;
+    padding: var(--sp-2) var(--sp-4);
+    border-radius: var(--radius-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
+    white-space: nowrap;
+    line-height: 1.2;
+    min-height: 36px;
+}
+
+.btn:disabled, .btn.is-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.btn--primary {
+    background: var(--bg-button);
+    color: var(--text-button);
+    border-color: var(--bg-button);
+}
+.btn--primary:hover:not(:disabled) {
+    background: var(--bg-button-hover);
+    border-color: var(--bg-button-hover);
+}
+
+.btn--ghost {
+    background: transparent;
+    color: var(--text-secondary, var(--text-primary));
+    border-color: var(--border-primary);
+}
+.btn--ghost:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn--quiet {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: transparent;
+}
+.btn--quiet:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn--danger {
+    background: var(--bg-danger);
+    color: #fff;
+    border-color: var(--bg-danger);
+}
+.btn--danger:hover:not(:disabled) {
+    background: var(--bg-danger-hover);
+    border-color: var(--bg-danger-hover);
+}
+
+.btn--sm {
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--fs-meta);
+    min-height: 28px;
+}
+
+.btn--lg {
+    padding: var(--sp-3) var(--sp-5);
+    font-size: var(--fs-body);
+    min-height: 44px;
+}
+
+.btn--icon {
+    width: 36px;
+    min-height: 36px;
+    padding: 0;
+}
+/* Default colours for a bare .btn--icon (no colour variant). When
+   combined with .btn--primary / .btn--danger / .btn--ghost / .btn--quiet
+   the variant's own colour rules apply — otherwise the muted icon
+   colour below would override the variant's foreground (and the hover
+   rule would override its background), which produced a dark icon on a
+   coloured primary fill in light mode. */
+.btn--icon:not(.btn--primary):not(.btn--danger):not(.btn--ghost):not(.btn--quiet) {
+    color: var(--text-muted);
+}
+/* Hover tint only where a pointer really hovers: a touch screen keeps
+   :hover after a tap, which left a grey box on the last button tapped. */
+@media (hover: hover) {
+    .btn--icon:not(.btn--primary):not(.btn--danger):not(.btn--ghost):not(.btn--quiet):hover:not(:disabled) {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+    }
+}
+.btn--icon:not(.btn--primary):not(.btn--danger):not(.btn--ghost):not(.btn--quiet):active:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Page header buttons: one height for icon and labelled buttons, and on
+   phones (labels hidden) one square size for all of them. */
+.btn.header-action {
+    min-height: 36px;
+}
+.btn.header-action.btn--icon {
+    width: 36px;
+}
+@media (max-width: 639px) {
+    .btn.header-action,
+    .btn.header-action.btn--icon {
+        width: 40px;
+        min-height: 40px;
+        padding: 0;
+        justify-content: center;
+    }
+}
+.btn--icon.btn--lg {
+    width: 44px;
+    min-height: 44px;
+}
+.btn--icon.btn--sm {
+    width: 28px;
+    min-height: 28px;
+}
+
+
+/* ---- Field (input / textarea / select) --------------------------------- */
+
+.field {
+    appearance: none;
+    width: 100%;
+    background: var(--bg-input, var(--bg-secondary));
+    color: var(--text-primary);
+    border: var(--border-hairline) solid var(--border-secondary, var(--border-primary));
+    border-radius: var(--radius-md);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--fs-body);
+    font-family: inherit;
+    line-height: var(--lh-snug);
+    transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
+    min-height: 36px;
+}
+.field:focus, .field:focus-visible {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px var(--ring-focus);
+}
+.field:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.field--sm {
+    padding: var(--sp-1) var(--sp-2);
+    font-size: var(--fs-meta);
+    min-height: 28px;
+}
+
+/* When .field is applied to a <select>, the global `select` rule in
+   styles.css sets a chevron background-image with background-repeat:
+   no-repeat — but `.field`'s `background:` shorthand resets only
+   `background-color` reliably across browsers; in practice the chevron
+   ends up tiled horizontally inside the select. Re-establish the
+   chevron explicitly here so select.field renders a single chevron at
+   the right edge like the global select rule intends. */
+select.field {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%236b7280' d='M4.5 5.5L8 9l3.5-3.5L10.75 4.75 8 7.5 5.25 4.75z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1em 1em;
+    padding-right: 2rem;
+    cursor: pointer;
+}
+html.dark select.field {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23cbd5e1' d='M4.5 5.5L8 9l3.5-3.5L10.75 4.75 8 7.5 5.25 4.75z'/%3E%3C/svg%3E");
+}
+
+
+/* ---- Spinner ------------------------------------------------------------ */
+
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-primary);
+    border-top-color: var(--text-accent);
+    border-radius: 50%;
+    display: inline-block;
+    animation: spinnerSpin 700ms linear infinite;
+}
+.spinner--sm { width: 12px; height: 12px; border-width: 2px; }
+.spinner--lg { width: 24px; height: 24px; border-width: 3px; }
+@keyframes spinnerSpin {
+    to { transform: rotate(360deg); }
+}
+
+
+/* ---- Empty state -------------------------------------------------------- */
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--sp-7) var(--sp-4);
+    gap: var(--sp-3);
+    color: var(--text-muted);
+}
+.empty__icon {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+.empty__title {
+    font-size: var(--fs-subhead);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.empty__body {
+    font-size: var(--fs-meta);
+    color: var(--text-muted);
+    max-width: 36ch;
+    line-height: var(--lh-snug);
+}
+
+
+/* ---- Status pill (semantic colour, tint background) -------------------
+ *
+ * <span class="pill-status pill-status--info">Allowed</span>
+ *
+ * Use for at-a-glance status badges where the colour carries semantic
+ * meaning. Backgrounds use --tint-* tokens so they look consistent
+ * across themes but still adapt to light/dark.
+ * --------------------------------------------------------------------- */
+
+.pill-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: 1px var(--sp-2);
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-label);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: var(--border-hairline) solid transparent;
+    white-space: nowrap;
+    line-height: 1.6;
+}
+.pill-status--info       { background: var(--tint-info);       color: var(--tint-info-fg);       border-color: var(--tint-info-border); }
+.pill-status--success    { background: var(--tint-success);    color: var(--tint-success-fg);    border-color: var(--tint-success-border); }
+.pill-status--warn       { background: var(--tint-warn);       color: var(--tint-warn-fg);       border-color: var(--tint-warn-border); }
+.pill-status--danger     { background: var(--tint-danger);     color: var(--tint-danger-fg);     border-color: var(--tint-danger-border); }
+.pill-status--processing { background: var(--tint-processing); color: var(--tint-processing-fg); border-color: var(--tint-processing-border); }
+.pill-status--pending    { background: var(--tint-pending);    color: var(--tint-pending-fg);    border-color: var(--tint-pending-border); }
+.pill-status--incognito  { background: var(--tint-incognito);  color: var(--tint-incognito-fg);  border-color: var(--tint-incognito-border); }
+
+
+/* ---- User-coloured chip (folder / tag) --------------------------------
+ *
+ * <span class="chip" :style="{ backgroundColor: tag.color, color: getContrastTextColor(tag.color) }">Work</span>
+ *
+ * Used for folder pills and tag pills where the colour is user-chosen
+ * (so we can't bake it into a token). The shape — rounded-md, tight
+ * padding, label-size, semi-bold — matches the sidebar style, which
+ * is now the standard chip look across the app. Add .chip--clickable
+ * to get the hover affordance on filter chips.
+ * --------------------------------------------------------------------- */
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px 2px 7px;
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-label);
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    max-width: 14rem;
+    /* Hairline outline at 12% black; reads on any custom background
+       colour and gives the chip a defined edge without committing to
+       a heavy border. */
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    transition: opacity 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+}
+
+.chip > i {
+    font-size: 0.78em;
+    line-height: 0;
+    opacity: 0.85;
+}
+
+.chip > .chip__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chip--clickable {
+    cursor: pointer;
+}
+
+.chip--clickable:hover {
+    opacity: 0.92;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.chip--clickable:active {
+    transform: scale(0.97);
+}
+
+/* Neutral metadata chip — filled bg-tertiary tablet for facts like
+   date / file size / filename / participants. Distinct from .chip
+   (which carries a user-chosen colour for folders & tags): the grey
+   fill makes facts read as a tidy row of tablets instead of bare
+   icon+text, and visually separates them from the coloured tag chips
+   without needing a divider. Icon is accent-coloured; label
+   truncates. This is the look the mobile expanded panel uses; it is
+   now shared so desktop + mobile render identically. */
+.chip-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+    max-width: 16rem;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    transition: opacity 0.15s ease;
+}
+
+.chip-meta > i {
+    color: var(--text-accent);
+    font-size: 0.85em;
+    line-height: 0;
+}
+
+.chip-meta__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chip-meta--clickable {
+    cursor: pointer;
+}
+
+.chip-meta--clickable:hover {
+    opacity: 0.8;
+}
+
+/* Warning variant for the duplicate-files indicator. */
+.chip-meta--warn {
+    background: rgba(217, 119, 6, 0.12);
+    color: #d97706;
+}
+.chip-meta--warn > i {
+    color: inherit;
+}
+
+/* Icon-only round chip for the small status badges (incoming-share /
+   group / outgoing-share / public-link). Keeps semantic background
+   colour from inline style. */
+.chip-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    color: white;
+    font-size: 10px;
+    line-height: 0;
+    flex-shrink: 0;
+}
+
+
+/* ---- Toast / Banner ---------------------------------------------------- */
+
+.banner {
+    padding: var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-meta);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    border: var(--border-hairline) solid var(--border-primary);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+.banner--info     { background: var(--bg-info-light);    border-color: var(--border-accent); color: var(--text-info-strong, var(--text-primary)); }
+.banner--success  { background: var(--bg-success-light); border-color: var(--border-success, var(--border-primary)); color: var(--text-primary); }
+.banner--warn     { background: var(--bg-warn-light);    border-color: var(--border-accent); color: var(--text-primary); }
+.banner--danger   { background: var(--bg-danger-light);  border-color: var(--border-danger); color: var(--text-danger-strong, var(--text-danger)); }
+
+
+/* ---- Modal / dialog ----------------------------------------------------
+ *
+ * Standard modal grammar:
+ *
+ *   <div class="modal-overlay" @click.self="close">
+ *     <div class="modal-panel modal-panel--md">
+ *       <div class="modal-header">
+ *         <h3 class="modal-title">Title</h3>
+ *         <button class="modal-close" @click="close"><i class="fas fa-times"></i></button>
+ *       </div>
+ *       <div class="modal-body">…</div>
+ *       <div class="modal-footer">
+ *         <button class="btn btn--ghost">Cancel</button>
+ *         <button class="btn btn--primary">Save</button>
+ *       </div>
+ *     </div>
+ *   </div>
+ *
+ * Size variants: --xs (320), --sm (440), --md (560), --lg (760), --xl (980),
+ * --full (95vw). All scroll within the body region if content overflows.
+ * --------------------------------------------------------------------- */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-4);
+    z-index: 50;
+    animation: modalFadeIn 140ms ease-out;
+}
+
+html.dark .modal-overlay {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.modal-panel {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: var(--border-hairline) solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 560px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalPanelIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPanelIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-panel--xs   { max-width: 320px; }
+.modal-panel--sm   { max-width: 440px; }
+.modal-panel--md   { max-width: 560px; }
+.modal-panel--lg   { max-width: 760px; }
+.modal-panel--xl   { max-width: 980px; }
+.modal-panel--full { max-width: 95vw; max-height: 95vh; }
+
+/* Bottom-sheet variant: opt-in via .modal-panel--bottom-sheet on the
+   panel. Above mobile breakpoint it behaves identically to a regular
+   centered modal. On phones (≤ 640 px) the overlay collapses its
+   padding and anchors the panel to the bottom edge of the viewport,
+   stretches it full-width, rounds only the top corners, and uses a
+   slide-up animation instead of the centered fade-in. Better thumb
+   reach for the close / primary actions. A small drag-handle bar is
+   drawn via a ::before so the affordance reads as draggable even
+   without implementing actual drag-to-dismiss. */
+@media (max-width: 640px) {
+    .modal-overlay:has(> .modal-panel--bottom-sheet) {
+        padding: 0;
+        align-items: flex-end;
+    }
+    .modal-panel--bottom-sheet {
+        max-width: 100%;
+        max-height: 92vh;
+        border-radius: 1rem 1rem 0 0;
+        border-bottom-width: 0;
+        animation: modalSheetUp 220ms cubic-bezier(0.16, 1, 0.3, 1);
+        position: relative;
+    }
+    .modal-panel--bottom-sheet::before {
+        content: '';
+        position: absolute;
+        top: var(--sp-2);
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--border-secondary);
+        z-index: 1;
+        pointer-events: none;
+    }
+    .modal-panel--bottom-sheet .modal-header {
+        padding-top: calc(var(--sp-4) + 4px);
+    }
+}
+@keyframes modalSheetUp {
+    from { opacity: 0; transform: translateY(100%); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-5);
+    border-bottom: var(--border-hairline) solid var(--border-primary);
+    flex: 0 0 auto;
+}
+
+.modal-title {
+    flex: 1;
+    font-size: var(--fs-subhead);
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: var(--lh-tight);
+    margin: 0;
+}
+
+.modal-subtitle {
+    font-size: var(--fs-meta);
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.modal-close {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.modal-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: var(--sp-5);
+    overflow-y: auto;
+    flex: 1 1 auto;
+    font-size: var(--fs-body);
+    line-height: var(--lh-base);
+}
+
+.modal-body--flush {
+    padding: 0;
+}
+
+/* Tab-content pane inside a modal: keep the panel a stable height as the
+   user switches tabs. Without this the modal "breathes" because the
+   Transcription tab is tall, Summary tab is medium, and Sharing tab is
+   short (especially when there are no admin groups and only an empty
+   state renders). A min-height that matches the tallest realistic tab
+   makes the modal feel rigid without needing JS height measurement. */
+.modal-tabs-pane {
+    min-height: 320px;
+}
+@media (max-width: 640px) {
+    .modal-tabs-pane {
+        min-height: 0;
+    }
+}
+
+.modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-5);
+    border-top: var(--border-hairline) solid var(--border-primary);
+    background: var(--bg-tertiary);
+    flex: 0 0 auto;
+}
+
+.modal-footer--between {
+    justify-content: space-between;
+}
+
+/* Variant: danger-leaning modals get a subtle danger accent on the title */
+.modal-panel--danger .modal-header { border-bottom-color: var(--border-danger); }
+.modal-panel--danger .modal-title { color: var(--text-danger); }
+
+
+/* ---- Floating panel (chat, dropdown body) ------------------------------ */
+
+.float-panel {
+    background: var(--bg-secondary);
+    border: var(--border-hairline) solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+    overflow: hidden;
+    backdrop-filter: blur(8px) saturate(120%);
+}
+.float-panel__header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: var(--border-hairline) solid var(--border-primary);
+    cursor: grab;
+    user-select: none;
+}
+.float-panel__header:active {
+    cursor: grabbing;
+}
+.float-panel__title {
+    flex: 1;
+    font-size: var(--fs-label);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-muted);
+}
+.float-panel__body {
+    padding: var(--sp-3);
+    overflow: auto;
+}
+.float-panel__footer {
+    padding: var(--sp-2) var(--sp-3);
+    border-top: var(--border-hairline) solid var(--border-primary);
+    background: var(--bg-tertiary);
+}
+
+
+/* ---- Prose surfaces (flush) --------------------------------------------
+ *
+ * Replaces the legacy .summary-box / .notes-box card chrome in the
+ * recording-detail right rail. Content lives directly on the rail
+ * surface; structure comes from the surrounding tab strip + headings.
+ * --------------------------------------------------------------------- */
+
+.prose-flush {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    min-width: 0;
+    max-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+    color: var(--text-primary);
+    font-size: var(--fs-body);
+    line-height: var(--lh-base);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.prose-flush h1, .prose-flush h2, .prose-flush h3, .prose-flush h4 {
+    color: var(--text-primary);
+    font-weight: 600;
+    line-height: var(--lh-snug);
+    margin-top: var(--sp-5);
+    margin-bottom: var(--sp-2);
+}
+/* Zero the leading margin on the first element so markdown that
+   starts with a heading doesn't leave a big visible gap above it. */
+.prose-flush > *:first-child {
+    margin-top: 0;
+}
+.prose-flush h1 { font-size: 1.25rem; letter-spacing: -0.01em; }
+.prose-flush h2 { font-size: 1.125rem; }
+.prose-flush h3 { font-size: 1rem; }
+.prose-flush h4 { font-size: 0.95rem; }
+.prose-flush p { margin: 0 0 var(--sp-3) 0; }
+/* Lists. The global Tailwind preflight reset strips list markers
+   (list-style: none), so we must re-assert list-style-type explicitly
+   or bullets/numbers disappear — which is exactly what was happening to
+   rendered summary/notes markdown after the .summary-box → .prose-flush
+   migration (the marker CSS lived only on the old box classes). */
+.prose-flush ul, .prose-flush ol {
+    margin: 0 0 var(--sp-3) var(--sp-5);
+    padding: 0;
+    list-style-position: outside;
+}
+.prose-flush ul { list-style-type: disc; }
+.prose-flush ol { list-style-type: decimal; }
+.prose-flush li { margin: 0 0 var(--sp-1) 0; display: list-item; }
+/* Nested lists: tighter vertical rhythm + distinct marker so depth reads. */
+.prose-flush li > ul, .prose-flush li > ol {
+    margin-top: var(--sp-1);
+    margin-bottom: 0;
+}
+.prose-flush ul ul { list-style-type: circle; }
+.prose-flush ul ul ul { list-style-type: square; }
+
+/* Tables (e.g. the "Next Steps" two-column table in summaries). The
+   block + overflow-x lets wide tables scroll instead of overflowing the
+   rail. */
+.prose-flush table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 var(--sp-3) 0;
+    display: block;
+    overflow-x: auto;
+    font-size: 0.95em;
+}
+.prose-flush th, .prose-flush td {
+    border: var(--border-hairline) solid var(--border-secondary);
+    padding: var(--sp-2);
+    text-align: left;
+    vertical-align: top;
+}
+.prose-flush th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+}
+.prose-flush strong { color: var(--text-primary); font-weight: 600; }
+.prose-flush em { color: var(--text-primary); }
+.prose-flush code {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 0.1em 0.35em;
+    border-radius: var(--radius-sm);
+    font-size: 0.92em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.prose-flush pre {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: var(--sp-3);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin: 0 0 var(--sp-3) 0;
+    font-size: 0.9em;
+}
+.prose-flush a {
+    color: var(--text-accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+.prose-flush blockquote {
+    border-left: 3px solid var(--border-accent);
+    margin: 0 0 var(--sp-3) 0;
+    padding-left: var(--sp-3);
+    color: var(--text-muted);
+}
+.prose-flush hr {
+    border: none;
+    border-top: var(--border-hairline) solid var(--border-primary);
+    margin: var(--sp-5) 0;
+}
+
+
+/* ---- Rail layout (right column of recording detail) -------------------- */
+
+.rail {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-secondary);
+    border-left: var(--border-hairline) solid var(--border-primary);
+}
+.rail__header {
+    flex: 0 0 auto;
+    background: var(--bg-secondary);
+    padding: 0 var(--sp-4);
+}
+.rail__body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--sp-4) var(--sp-4) var(--sp-6);
+}
+
+/* Sections inside the rail body for stacked layouts that don't use tabs.
+   Retained for spec but rail content currently uses .tabs above. */
+.rail-section + .rail-section {
+    margin-top: var(--sp-6);
+    padding-top: var(--sp-4);
+    border-top: var(--border-hairline) solid var(--border-primary);
+}
+
+
+/* ---- Mobile touch-target adjustments -----------------------------------
+ *
+ * Apple HIG + Material spec both want ~44px minimum touch targets on
+ * touch devices. On narrow viewports, bump icon buttons and tabs to
+ * comfortable sizes so they're easy to hit with a thumb.
+ * --------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+    .btn--icon { width: 40px; min-height: 40px; }
+    .btn--icon.btn--sm { width: 36px; min-height: 36px; }
+    .btn { min-height: 40px; }
+    .btn--sm { min-height: 36px; }
+    .tab { padding: var(--sp-3) var(--sp-3); min-height: 44px; }
+    .toggle { min-height: 32px; padding: var(--sp-1) var(--sp-3); }
+    .field { min-height: 40px; font-size: 16px; /* prevents iOS zoom */ }
+    .modal-header { padding: var(--sp-3) var(--sp-4); }
+    .modal-body { padding: var(--sp-4); }
+    .modal-footer { padding: var(--sp-3) var(--sp-4); }
+}
+
+
+/* ---- Focus ring fallback for all interactive elements ----------------- */
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+}
+
+/* But override outline for elements that already provide their own ring */
+.field:focus-visible,
+.btn:focus-visible,
+.tab:focus-visible,
+.toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--ring-focus);
+}
+
+
+/* ---- Floating Chat Panel ------------------------------------------------
+ *
+ * Floating, dockable chat surface for the recording-detail screen.
+ * Lives at z-index 40 (above content but below modals at 50).
+ *
+ * States — keyed by .is-{state} on the panel:
+ *   .is-floating    free-positioned, draggable, resizable
+ *   .is-dock-left   overlays the transcript column (#leftMainColumn)
+ *   .is-dock-right  overlays the right rail (#rightMainColumn)
+ *   .is-dock-full   overlays both content columns (never under sidebar
+ *                   or bottom audio player; positioned by JS using the
+ *                   #mainContentColumns bounding rect)
+ *
+ * Sizing in floating mode is driven by JS-bound width/height (user
+ * resize via the SE-corner handle). Docked states use computed style
+ * pulled from the live column rect.
+ * --------------------------------------------------------------------- */
+
+.floating-chat-root {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 40;
+}
+
+/* FAB (collapsed) */
+.floating-chat-fab {
+    position: fixed;
+    bottom: 84px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    background: var(--bg-button);
+    color: var(--text-button);
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-lg);
+    font-size: 22px;
+    transition: transform var(--t-fast) ease, box-shadow var(--t-fast) ease;
+    pointer-events: auto;
+}
+.floating-chat-fab:hover {
+    transform: scale(1.06);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+.floating-chat-fab-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--bg-danger);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Panel base (positioning + sizing set inline by Vue for all states) */
+.floating-chat-panel {
+    position: fixed;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: var(--border-hairline) solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    backdrop-filter: blur(6px);
+    animation: chatPanelIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: box-shadow var(--t-fast) ease;
+}
+
+@keyframes chatPanelIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Dock states drop ALL shadow + corner radius so they read as part of
+ * the column layout (and never have a visible curve at the sidebar
+ * edge). Border-left/right kept as a hairline so the panel still has
+ * a definite visual edge against the column it overlays. */
+.floating-chat-panel.is-dock-left,
+.floating-chat-panel.is-dock-right,
+.floating-chat-panel.is-dock-full {
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    animation: none;
+}
+
+/* While actively dragging or resizing, give a subtle ring so the user
+ * sees the interaction. Only applies in floating state. */
+.floating-chat-panel.is-floating.is-dragging,
+.floating-chat-panel.is-floating.is-resizing {
+    box-shadow: var(--shadow-lg), 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+/* Header (drag handle) */
+.floating-chat-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: var(--border-hairline) solid var(--border-primary);
+    cursor: grab;
+    user-select: none;
+    background: var(--bg-tertiary);
+}
+.floating-chat-header:active { cursor: grabbing; }
+
+.floating-chat-header-title {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--fs-meta);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.floating-chat-header-title i { color: var(--text-muted); font-size: 12px; }
+
+.floating-chat-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.floating-chat-messages {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--sp-3);
+}
+.floating-chat-messages > .message {
+    margin-bottom: var(--sp-3);
+}
+
+.floating-chat-input {
+    flex: 0 0 auto;
+    border-top: var(--border-hairline) solid var(--border-primary);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--bg-secondary);
+}
+
+/* Dock-target divider in the header actions row */
+.floating-chat-dock-divider {
+    display: inline-block;
+    width: 1px;
+    height: 18px;
+    background: var(--border-primary);
+    margin: 0 var(--sp-1);
+}
+
+/* Dock-target active button (highlights the currently-active dock) */
+.floating-chat-header-actions .btn.is-active {
+    color: var(--text-accent);
+    background: var(--bg-tertiary);
+}
+
+/* Split dock button (main + caret + dropdown) */
+.floating-chat-dock-split {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    border-radius: var(--radius-sm);
+    overflow: visible;
+}
+.floating-chat-dock-main {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+.floating-chat-dock-caret {
+    width: 18px !important;
+    min-width: 18px;
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    border-left: 1px solid var(--border-primary);
+    margin-left: -1px;
+}
+.floating-chat-dock-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 220px;
+    padding: var(--sp-1);
+    z-index: 50;
+    animation: chatPanelIn 140ms ease-out;
+}
+.floating-chat-dock-menu-item {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: var(--fs-meta);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    width: 100%;
+    text-align: left;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.floating-chat-dock-menu-item:hover {
+    background: var(--bg-tertiary);
+}
+.floating-chat-dock-menu-item.is-active {
+    color: var(--text-accent);
+    background: var(--bg-tertiary);
+}
+.floating-chat-dock-menu-item i,
+.floating-chat-dock-menu-item svg {
+    width: 18px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+.floating-chat-dock-menu-item.is-active i,
+.floating-chat-dock-menu-item.is-active svg {
+    color: var(--text-accent);
+}
+
+/* SE-corner resize handle (only shown in floating state) */
+.floating-chat-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    pointer-events: auto;
+    user-select: none;
+    touch-action: none;
+    background:
+        linear-gradient(
+            135deg,
+            transparent 0,
+            transparent 50%,
+            var(--text-muted) 50%,
+            var(--text-muted) 52%,
+            transparent 52%,
+            transparent 60%,
+            var(--text-muted) 60%,
+            var(--text-muted) 62%,
+            transparent 62%,
+            transparent 70%,
+            var(--text-muted) 70%,
+            var(--text-muted) 72%,
+            transparent 72%
+        );
+    opacity: 0.5;
+    transition: opacity var(--t-fast) ease;
+}
+.floating-chat-resize-handle:hover { opacity: 0.9; }
+
+@media (max-width: 768px) {
+    .floating-chat-fab { display: none; }
+    .floating-chat-panel { display: none; }
+}
+
+
+/* ---- Settings page shell ---------------------------------------------
+ *
+ * Layout primitives for tab-driven settings pages (account, admin,
+ * inquire-when-needed). The page is structured as:
+ *
+ *   body.h-full.flex.flex-col.overflow-hidden
+ *     page-header (56px, sticky-by-flex)
+ *     div.main-container.flex-1.flex.flex-col.min-h-0.overflow-hidden
+ *       main.flex-1.flex.flex-col.min-h-0.overflow-hidden
+ *         div.flex-1.flex.flex-col.min-h-0.overflow-hidden
+ *           tabs-scroller (flex-shrink-0)
+ *           div.tab-content-wrapper
+ *             div.tab-content (active = display:flex, hidden = display:none)
+ *               div.tab-scroll  — scrolls
+ *               div.tab-footer  — sticky bottom row
+ *
+ * Every flex parent needs min-height: 0 and overflow: hidden to keep the
+ * inner .tab-scroll as the only scroll surface. Without min-h: 0 the
+ * default min-h: auto lets children expand the parent, defeating the
+ * overflow on the scroll element.
+ * --------------------------------------------------------------------- */
+
+.tab-content-wrapper {
+    flex: 1 1 auto;
+    overflow: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.tab-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+/* Compound selector wins over the bare .tab-content rule whatever the
+   order of stylesheet load. Hidden tabs are display: none, so they
+   don't render their .tab-footer either — otherwise multiple footers
+   stack at the bottom of the page. */
+.tab-content.hidden {
+    display: none;
+}
+
+.tab-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--sp-6) var(--sp-6);
+}
+
+/* Sticky bottom row of the active tab. Carries the copyright on the
+   LEFT (via ::before content driven by a CSS variable) and per-tab
+   action buttons on the right. The CSS variable is updated by JS once
+   the version is fetched from /api/system/info so every page shows
+   the live version without per-page markup duplication. */
+.tab-footer {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-6);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-primary);
+}
+.tab-footer::before {
+    content: var(--footer-version-text, "Speakr");
+    margin-right: auto;
+    color: var(--text-light);
+    font-size: var(--fs-meta);
+}
+.tab-footer__left {
+    margin-right: auto;
+    color: var(--text-muted);
+    font-size: var(--fs-meta);
+}
+
+@media (max-width: 640px) {
+    .tab-scroll { padding: var(--sp-4) var(--sp-4); }
+    .tab-footer { padding: var(--sp-2) var(--sp-4); }
+    .tab-footer::before { font-size: 10px; }
+}
+
+
+/* ---- Upload modal: progressive-disclosure Options group ------------------
+   The .upload-options-group <details> wraps Folder / Tags / Prompt vars /
+   Advanced ASR. The chevron-down icon inside flips up when the group is
+   expanded so users have a clear visual indicator. */
+.upload-options-group[open] .upload-options-chevron {
+    transform: rotate(180deg);
+}
+
+/* When expanded, the whole group reads as ONE contained card: the
+   summary becomes the card header (connected to the body, no gap) and
+   the body sits visibly INSIDE the bordered box. Closed, it's just the
+   summary chip. The card border/background + radius are declared (and
+   transitioned) in the Expand/collapse animation section below, shared
+   with .disclosure-card. */
+
+/* Summary as the card header: square off its bottom corners and add a
+   divider so it reads as attached to the body below. Specificity
+   (class + [attr] + element) beats the inline Tailwind rounded-md. */
+.upload-options-group[open] > summary {
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-bottom: 1px solid var(--border-secondary);
+}
+
+/* Body padded inside the card; first section loses its top margin so
+   it doesn't double up with the card padding. */
+.upload-options-group[open] > .upload-options-body {
+    padding: var(--sp-2) var(--sp-4) var(--sp-4);
+}
+.upload-options-group[open] > .upload-options-body > div:first-child {
+    margin-top: 0;
+}
+
+/* Nested disclosure (Advanced ASR / Prompt variables) inside the
+   Options card: connect each trigger to its panel so the pair reads as
+   one sub-card rather than two same-level blocks. The trigger gets
+   .disclosure-trigger and the panel .disclosure-panel; when the panel
+   is shown the trigger squares its bottom corners and the panel its
+   top, and the panel hangs flush beneath with a shared border. */
+.disclosure-trigger.is-open {
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
+    /* Outline the header too so it matches the panel below — without
+       this the panel had side/bottom borders but the header floated
+       with no outline. The header keeps its bottom border, which
+       doubles as the divider line to the panel. */
+    border: 1px solid var(--border-secondary);
+}
+.disclosure-panel {
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    border-top: 0 !important;
+    margin-top: 0 !important;
+}
+
+
+/* ---- Themed checkbox ---------------------------------------------------
+   Reusable accent-filled checkbox with a white tick — the same look as
+   the speaker modal's .speaker-checkbox, promoted to a primitive so any
+   form can use one consistent themed control instead of the raw browser
+   checkbox. Put .checkbox on an <input type="checkbox">. */
+input[type="checkbox"].checkbox {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 2px solid var(--border-secondary);
+    border-radius: 0.25rem;
+    background-color: var(--bg-input);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+input[type="checkbox"].checkbox:hover {
+    border-color: var(--text-accent);
+    background-color: var(--bg-secondary);
+}
+input[type="checkbox"].checkbox:focus {
+    outline: none;
+    border-color: var(--text-accent);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+input[type="checkbox"].checkbox:checked {
+    background-color: var(--text-accent);
+    border-color: var(--text-accent);
+}
+input[type="checkbox"].checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0.25rem;
+    height: 0.5rem;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -60%) rotate(45deg);
+}
+input[type="checkbox"].checkbox:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+
+/* ---- Generic <details> disclosure card ---------------------------------
+   Same idea as .upload-options-group but reusable on any <details>:
+   when open the whole element is one bordered card with the summary as
+   its header and the body padded inside. Put .disclosure-card on the
+   <details> and .disclosure-card-body on the body wrapper. The card
+   border/background + radius are declared (and transitioned) in the
+   Expand/collapse animation section below. */
+details.disclosure-card[open] > summary {
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-bottom: 1px solid var(--border-secondary);
+}
+details.disclosure-card[open] > .disclosure-card-body {
+    padding: var(--sp-2) var(--sp-3) var(--sp-3);
+    margin-top: 0;
+}
+details.disclosure-card[open] > .disclosure-card-body > *:first-child {
+    margin-top: 0;
+}
+
+
+/* ---- Expand / collapse animation ---------------------------------------
+ *
+ * Two mechanisms, one feel (0.25s ease). When an expander animates its
+ * height, the modal — which sizes to its content — grows/shrinks in step
+ * automatically, so the whole panel resize looks smooth without animating
+ * the modal itself.
+ *
+ * (A) Native <details> (.upload-options-group, .disclosure-card):
+ *     animate the ::details-content box. interpolate-size lets height
+ *     transition to/from the `auto` keyword; content-visibility with
+ *     allow-discrete keeps the content painted through the collapse.
+ *     Supported in current Chromium; older browsers ignore it and the
+ *     expander just snaps open/closed (no regression).
+ *
+ *     The card border/background is given a transparent resting state and
+ *     transitioned so it fades in/out in step with the height instead of
+ *     snapping the moment the [open] attribute flips.
+ *
+ * (B) v-show panels (.disclosure-anim): the grid-template-rows 0fr→1fr
+ *     trick. Works in every browser. The body stays in the DOM and the
+ *     inner wrapper clips overflow, so the row collapses to zero height
+ *     smoothly. Toggle .is-open on the grid container.
+ */
+/* Scoped to the disclosure elements (not :root) so enabling keyword
+   interpolation doesn't affect height transitions elsewhere. */
+.upload-options-group,
+details.disclosure-card {
+    interpolate-size: allow-keywords;
+}
+
+.upload-options-group::details-content,
+details.disclosure-card::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition: block-size 0.25s ease, content-visibility 0.25s allow-discrete;
+}
+.upload-options-group[open]::details-content,
+details.disclosure-card[open]::details-content {
+    block-size: auto;
+}
+
+/* Transition the card chrome so it fades with the height rather than
+   snapping when [open] toggles. Resting border is transparent (keeps the
+   closed chip the same size; no layout shift). */
+.upload-options-group,
+details.disclosure-card {
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    transition: border-color 0.25s ease, background-color 0.25s ease;
+}
+.upload-options-group[open],
+details.disclosure-card[open] {
+    border-color: var(--border-secondary);
+    background: var(--bg-secondary);
+}
+
+/* Grid-rows animation wrapper for the v-show panels. */
+.disclosure-anim {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.25s ease;
+}
+.disclosure-anim.is-open {
+    grid-template-rows: 1fr;
+}
+.disclosure-anim__inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Respect users who ask for reduced motion: snap instead of animate. */
+@media (prefers-reduced-motion: reduce) {
+    .upload-options-group::details-content,
+    details.disclosure-card::details-content,
+    .upload-options-group,
+    details.disclosure-card,
+    .disclosure-anim {
+        transition: none !important;
+    }
+}
+
+
+/* ---- Mobile editor flat corners ----------------------------------------
+   On phones the EasyMDE editor spans screen-edge to screen-edge inside
+   the mobile-summary-panel / mobile-notes-panel editing shells (no
+   horizontal panel padding), so the inherited 0.75rem rounded corners
+   on the EasyMDEContainer + toolbar + CodeMirror look like a card
+   floating inside the viewport instead of a flat editing surface.
+   Flatten them at ≤ 640 px so the editor reads as one continuous
+   surface from edge to edge. */
+@media (max-width: 640px) {
+    .markdown-editor-container .EasyMDEContainer,
+    .markdown-editor-container .EasyMDEContainer .editor-toolbar,
+    .markdown-editor-container .EasyMDEContainer .CodeMirror,
+    .markdown-editor-container .EasyMDEContainer .CodeMirror-scroll {
+        border-radius: 0 !important;
+    }
+}
+
+
+/* ---- Progress popup viewport rules -------------------------------------
+   Desktop: 320 px floating card pinned to bottom-left.
+   Mobile (≤ 640 px): full-width bottom-sheet that sits ABOVE the audio
+   player + tab navigation strip (≈ 70 px player + 56 px nav + safe-area
+   inset). Rounded only on the top corners so it reads as a sheet
+   anchored to the bottom edge, not a free-floating card. */
+.progress-popup {
+    bottom: 1rem;
+    left: 1rem;
+    width: 20rem;
+}
+.progress-popup__card {
+    border-radius: 0.5rem;
+}
+
+@media (max-width: 640px) {
+    /* On phones the queue is a compact status bar pinned just ABOVE the
+       bottom audio player + nav, full width. The height of that bottom
+       cluster is measured into --mobile-bottom-inset (set in app.modular.js)
+       so the bar never overlaps it whether the player is shown, hidden, or
+       taller for video — and being anchored to the bottom it stays well
+       clear of the header / metadata row. The nav's offsetHeight already
+       includes its safe-area padding, so the inset accounts for that.
+       Collapsed it's a thin counter strip; tapping expands the list, which
+       grows upward from the bottom edge. */
+    .progress-popup {
+        bottom: calc(var(--mobile-bottom-inset, 116px) + 8px) !important;
+        left: 0.5rem !important;
+        right: 0.5rem !important;
+        top: auto !important;
+        width: auto !important;
+        max-width: none !important;
+        animation: progressPopIn 180ms ease;
+    }
+    /* Expanded: height-capped + scrollable so a long queue can't run off
+       the top of the screen. */
+    .progress-popup__card {
+        border-radius: 0.6rem;
+        max-height: 50vh;
+        display: flex;
+        flex-direction: column;
+    }
+    .progress-popup__card > .p-2 {
+        overflow-y: auto;
+    }
+
+    /* Collapsed = compact counter strip: icon + count + expand chevron +
+       close. Drop the desktop slide transform (the strip IS the header)
+       and hide the long title text, the summary line, and the clear
+       button so it stays slim. Keep the close so it can be dismissed. */
+    .progress-popup.minimized {
+        transform: none !important;
+    }
+    .progress-popup.minimized .progress-popup__title-text,
+    .progress-popup.minimized .progress-popup__summary,
+    .progress-popup.minimized .progress-popup__clear {
+        display: none;
+    }
+    .progress-popup.minimized .progress-popup__card {
+        max-height: none;
+    }
+    .progress-popup.minimized .progress-popup__header {
+        cursor: pointer;
+    }
+}
+
+@keyframes progressPopIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ---- Native <select> theming ------------------------------------------
+   The browser's native dropdown for <select> elements doesn't inherit
+   the page's theme variables — on dark mode it falls back to OS / UA
+   default which is typically a light surface, producing the
+   "white-on-white" reading of <option>s seen on the folder picker.
+   Explicitly styling the option elements with the same theme tokens
+   the rest of the UI uses gives consistent contrast in both modes.
+   Note: <option> styling support varies by browser; covers Chrome /
+   Edge / Firefox on desktop and most mobile browsers. Safari ignores
+   most <option> styles but uses system theme automatically. */
+select option {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+select option:checked,
+select option:hover {
+    background-color: var(--bg-accent);
+    color: var(--text-accent);
+}

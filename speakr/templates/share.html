@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+    <title>Shared Recording - {{ recording.title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+        <!-- All dependencies bundled locally for offline support -->
+<script src="{{ url_for('static', filename='vendor/js/vue.global.js') }}"></script>
+        <!-- All dependencies bundled locally for offline support -->
+<script src="{{ url_for('static', filename='vendor/js/axios.min.js') }}"></script>
+        <!-- All dependencies bundled locally for offline support -->
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
+
+    <!-- Loading overlay to prevent FOUC -->
+    {% include 'includes/loading_overlay.html' %}
+
+    <script>
+        // Function to apply the theme based on localStorage and system preference
+        function applyTheme() {
+            // Guard against early execution
+            if (!document.documentElement) return;
+
+            // Apply dark mode
+            const savedMode = localStorage.getItem('darkMode');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedMode === 'true' || (savedMode === null && prefersDark)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+
+            // Apply color scheme
+            const savedScheme = localStorage.getItem('colorScheme') || 'blue';
+            const isDark = document.documentElement.classList.contains('dark');
+            const themePrefix = isDark ? 'theme-dark-' : 'theme-light-';
+
+            // Remove all other theme classes
+            const themeClasses = ['blue', 'emerald', 'purple', 'rose', 'amber', 'teal'];
+            themeClasses.forEach(theme => {
+                document.documentElement.classList.remove(`theme-light-${theme}`);
+                document.documentElement.classList.remove(`theme-dark-${theme}`);
+            });
+
+            // Add the correct theme class
+            if (savedScheme !== 'blue') {
+                 document.documentElement.classList.add(themePrefix + savedScheme);
+            }
+        }
+
+        // Wait for DOM to be ready before applying theme
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyTheme);
+        } else {
+            applyTheme();
+        }
+    </script>
+    <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
+         <head> so that, as with the former runtime build, they follow the page's
+         own stylesheets in the cascade. -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+</head>
+<body class="h-full bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-300">
+    <div id="app" class="h-full flex flex-col" data-recording='{{ recording|tojson|safe }}'>
+        <!-- Header -->
+        <header class="bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] px-4 py-3 flex items-center justify-between flex-shrink-0 z-50">
+            <div class="flex items-center gap-3">
+                <img src="{{ url_for('static', filename='img/favicon.ico') }}" alt="Speakr" class="app-logo w-8 h-8">
+                <div>
+                    <h1 class="text-xl font-bold text-[var(--text-primary)]">${ recording.title }</h1>
+                    <p class="text-sm text-[var(--text-muted)]">Shared Recording</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button @click="toggleDarkMode"
+                        class="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+                        title="Toggle Theme">
+                    <i :class="isDarkMode ? 'fas fa-sun' : 'fas fa-moon'"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <!-- Audio Player - Fixed at top -->
+            <div class="bg-[var(--bg-secondary)] p-4 border-b border-[var(--border-primary)] flex-shrink-0">
+                <div class="max-w-4xl mx-auto">
+                    <!-- Show message if audio has been deleted -->
+                    <div v-if="recording.audio_deleted_at"
+                         class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-muted)] px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
+                        <i class="fas fa-info-circle"></i>
+                        <span>The audio file was removed. The transcript and summary remain available.</span>
+                    </div>
+                    <!-- Custom Audio/Video Player -->
+                    <div v-else>
+                        <component :is="recording.mime_type && recording.mime_type.startsWith('video/') ? 'video' : 'audio'"
+                               ref="audioPlayer"
+                               :class="recording.mime_type && recording.mime_type.startsWith('video/') ? 'w-full rounded-lg mb-3' : 'hidden'"
+                               :src="'/share/audio/' + recording.public_id"
+                               @play="handleAudioPlayPause"
+                               @pause="handleAudioPlayPause"
+                               @timeupdate="handleCustomAudioTimeUpdate"
+                               @loadedmetadata="handleAudioLoadedMetadata"
+                               @durationchange="handleAudioDurationChange"
+                               @ended="handleAudioEnded">
+                        </component>
+                        <div class="flex items-center gap-3">
+                        <!-- Play/Pause -->
+                        <button @click="toggleAudioPlayback"
+                                class="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-accent)] hover:bg-[var(--bg-accent-hover)] text-white transition-all flex-shrink-0 shadow-sm"
+                                :title="audioIsPlaying ? 'Pause' : 'Play'">
+                            <i :class="audioIsPlaying ? 'fas fa-pause' : 'fas fa-play'" class="text-sm" :style="!audioIsPlaying ? 'margin-left: 2px' : ''"></i>
+                        </button>
+                        <!-- Time -->
+                        <div class="flex flex-col items-end flex-shrink-0 leading-none">
+                            <span class="text-sm text-[var(--text-primary)] font-mono">${ formatAudioTime(audioCurrentTime) }</span>
+                            <span class="text-xs text-[var(--text-muted)] font-mono">${ formatAudioTime(audioDuration) }</span>
+                        </div>
+                        <!-- Playback Speed Control -->
+                        <div class="relative flex-shrink-0">
+                            <button @click="showSpeedMenu = !showSpeedMenu"
+                                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-accent)] hover:opacity-80 transition-all"
+                                    title="Playback speed">
+                                <span class="text-xs font-semibold font-mono">${ formatPlaybackRate(playbackRate) }</span>
+                            </button>
+                            <!-- Dropdown menu (opens downward) -->
+                            <div v-if="showSpeedMenu" @click.stop
+                                 class="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-[var(--bg-tertiary)] border border-[var(--border-accent)] rounded-md shadow-xl z-50 speed-dropdown backdrop-blur-sm">
+                                <div class="py-0.5 max-h-40 overflow-y-auto">
+                                    <button v-for="speed in playbackSpeeds" :key="speed"
+                                            @mousedown.prevent="setPlaybackRate(speed); showSpeedMenu = false"
+                                            class="w-full px-2 py-0.5 text-[11px] font-mono text-left hover:bg-[var(--bg-accent-light)] transition-colors"
+                                            :class="speed === playbackRate ? 'text-[var(--text-accent)] font-semibold bg-[var(--bg-accent-light)]' : 'text-[var(--text-primary)]'">
+                                        ${ speed }x
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Progress Bar -->
+                        <div class="flex-1 h-2 bg-[var(--bg-tertiary)] rounded-full cursor-pointer group relative"
+                             @click="(e) => { const rect = e.currentTarget.getBoundingClientRect(); seekAudioByPercent(((e.clientX - rect.left) / rect.width) * 100); }">
+                            <div class="h-full bg-[var(--bg-accent)] rounded-full transition-all duration-100"
+                                 :style="{ width: audioProgressPercent + '%' }">
+                            </div>
+                        </div>
+                        <!-- Volume -->
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <button @click="toggleAudioMute"
+                                    class="w-8 h-8 flex items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all">
+                                <i :class="audioIsMuted || playerVolume === 0 ? 'fas fa-volume-mute' : 'fas fa-volume-up'" class="text-sm"></i>
+                            </button>
+                            <input type="range" min="0" max="1" step="0.05" :value="playerVolume"
+                                   @input="(e) => setAudioVolume(parseFloat(e.target.value))"
+                                   class="volume-slider w-20 h-1.5 rounded-full cursor-pointer">
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation - Fixed below audio player -->
+            <div class="bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] flex-shrink-0">
+                <div class="max-w-4xl mx-auto">
+                    <div class="flex">
+                        <button @click="activeTab = 'transcription'"
+                                :class="[
+                                    'flex-1 px-4 py-3 text-sm font-medium transition-colors',
+                                    activeTab === 'transcription'
+                                        ? 'bg-[var(--bg-secondary)] text-[var(--text-accent)] border-b-2 border-[var(--border-focus)]'
+                                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                                ]">
+                            <i class="fas fa-file-text mr-2"></i>Transcription
+                        </button>
+                        {% if recording.summary %}
+                        <button @click="activeTab = 'summary'"
+                                :class="[
+                                    'flex-1 px-4 py-3 text-sm font-medium transition-colors',
+                                    activeTab === 'summary'
+                                        ? 'bg-[var(--bg-secondary)] text-[var(--text-accent)] border-b-2 border-[var(--border-focus)]'
+                                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                                ]">
+                            <i class="fas fa-file-alt mr-2"></i>Summary
+                        </button>
+                        {% endif %}
+                        {% if recording.notes %}
+                        <button @click="activeTab = 'notes'"
+                                :class="[
+                                    'flex-1 px-4 py-3 text-sm font-medium transition-colors',
+                                    activeTab === 'notes'
+                                        ? 'bg-[var(--bg-secondary)] text-[var(--text-accent)] border-b-2 border-[var(--border-focus)]'
+                                        : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                                ]">
+                            <i class="fas fa-sticky-note mr-2"></i>Notes
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content - Fixed height container -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                <div class="w-full max-w-4xl mx-auto p-4 flex-1 flex flex-col overflow-hidden">
+                    <!-- Transcription View -->
+                    <div v-show="activeTab === 'transcription'" class="w-full flex-1 flex flex-col overflow-hidden">
+                        <!-- Transcription Controls -->
+                        <div class="flex items-center justify-between mb-4 flex-shrink-0">
+                            <div v-if="readableMode ? hasDialogue : processedTranscription.hasDialogue" class="view-mode-toggle">
+                                <button @click="transcriptView = 'simple'"
+                                        :class="['toggle-button', transcriptView === 'simple' ? 'active' : '']">
+                                    <i class="fas fa-list mr-1"></i>Simple
+                                </button>
+                                <button @click="transcriptView = 'bubble'"
+                                        :class="['toggle-button', transcriptView === 'bubble' ? 'active' : '']">
+                                    <i class="fas fa-comments mr-1"></i>Bubble
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div v-if="!recording.audio_deleted_at && (readableMode ? hasDialogue : processedTranscription.hasDialogue)"
+                                     class="follow-player-control text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                                     @click="toggleFollowPlayerMode"
+                                     :title="followPlayerMode ? 'Auto-scroll enabled' : 'Auto-scroll disabled'">
+                                    <input type="checkbox"
+                                           :checked="followPlayerMode"
+                                           @click.stop="toggleFollowPlayerMode"
+                                           class="cursor-pointer">
+                                    <i class="fas fa-arrows-alt-v follow-icon"></i>
+                                </div>
+                                <button @click="copyTranscript" class="copy-btn">
+                                    <i class="fas fa-copy mr-1"></i>Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        {% if readable_mode and transcript %}
+                        <!-- SERVER-RENDERED VERSION (for READABLE_PUBLIC_LINKS mode) -->
+                        <!-- Speaker Legend (only for bubble view) -->
+                        {% if transcript.has_speakers and transcript.speakers %}
+                        <div v-show="transcriptView === 'bubble'"
+                             :class="['speaker-legend', legendExpanded ? 'expanded' : '', 'flex-shrink-0', 'mb-4']">
+                            <div class="speaker-legend-header" @click="legendExpanded = !legendExpanded">
+                                <div class="speaker-legend-title">
+                                    <i class="fas fa-users"></i>
+                                    Speakers
+                                    <span class="speaker-count-indicator">({{ transcript.speakers|length }})</span>
+                                </div>
+                                <i class="fas fa-chevron-down speaker-legend-toggle"></i>
+                            </div>
+                            <div class="speaker-legend-content">
+                                {% for speaker in transcript.speakers %}
+                                <div class="speaker-legend-item {{ speaker.color }}">
+                                    <span class="speaker-name">{{ speaker.name }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Transcription Content - Scrollable Box (Server-rendered for accessibility) -->
+                        <div class="w-full flex-1 overflow-y-auto transcription-box" @click="handleTranscriptClick">
+                            {% if transcript.is_json and transcript.segments %}
+                            <!-- Simple View (server-rendered) -->
+                            <div v-show="transcriptView === 'simple'" class="transcription-simple-view">
+                                {% for segment in transcript.segments %}
+                                <div class="speaker-segment cursor-pointer hover:bg-[var(--bg-accent-hover)] p-2 rounded transition-colors mb-2"
+                                     data-start-time="{{ segment.start_time }}"
+                                     data-end-time="{{ segment.end_time }}"
+                                     data-segment-index="{{ loop.index0 }}"
+                                     style="margin-bottom: 0.5rem !important;">
+                                    {% if segment.show_speaker and segment.speaker %}
+                                    <div class="speaker-tablet {{ segment.color }}">{{ segment.speaker }}</div>
+                                    {% endif %}
+                                    <div class="speaker-text">{{ segment.text }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <!-- Bubble View (server-rendered) -->
+                            <div v-show="transcriptView === 'bubble'" class="transcription-with-speakers">
+                                {% set ns = namespace(last_speaker=None) %}
+                                {% for segment in transcript.segments %}
+                                {% if segment.speaker != ns.last_speaker %}
+                                {% if not loop.first %}</div>{% endif %}
+                                <div class="bubble-row {% if segment.speaker and 'me' in segment.speaker|lower %}speaker-me{% endif %}">
+                                {% endif %}
+                                    <div class="speaker-bubble {{ segment.color }} {% if segment.speaker and 'me' in segment.speaker|lower %}speaker-me{% endif %} cursor-pointer"
+                                         data-start-time="{{ segment.start_time }}"
+                                         data-end-time="{{ segment.end_time }}"
+                                         data-segment-index="{{ loop.index0 }}">
+                                        <div class="speaker-bubble-content">{{ segment.text }}</div>
+                                    </div>
+                                {% set ns.last_speaker = segment.speaker %}
+                                {% endfor %}
+                                {% if transcript.segments %}</div>{% endif %}
+                            </div>
+                            {% else %}
+                            <!-- Plain Text View (for non-JSON transcriptions) -->
+                            <div class="whitespace-pre-wrap bidi-auto cursor-pointer hover:bg-[var(--bg-accent-hover)] p-2 rounded transition-colors">{{ transcript.plain_text }}</div>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <!-- VUE-RENDERED VERSION (default) -->
+                        <!-- Speaker Legend (only for bubble view) -->
+                        <div v-if="processedTranscription.hasDialogue && processedTranscription.speakers.length > 0 && transcriptView === 'bubble'"
+                             :class="['speaker-legend', legendExpanded ? 'expanded' : '', 'flex-shrink-0', 'mb-4']">
+                            <div class="speaker-legend-header" @click="legendExpanded = !legendExpanded">
+                                <div class="speaker-legend-title">
+                                    <i class="fas fa-users"></i>
+                                    Speakers
+                                    <span class="speaker-count-indicator">(${processedTranscription.speakers.length})</span>
+                                </div>
+                                <i class="fas fa-chevron-down speaker-legend-toggle"></i>
+                            </div>
+                            <div class="speaker-legend-content">
+                                <div v-for="(speaker, index) in processedTranscription.speakers"
+                                     :key="index"
+                                     :class="['speaker-legend-item', speaker.color]">
+                                    <span class="speaker-name">${speaker.name}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Transcription Content - Scrollable Box -->
+                        <div class="w-full flex-1 overflow-y-auto transcription-box" @click="handleTranscriptClick">
+                            <!-- Simple View -->
+                            <div v-if="transcriptView === 'simple'" class="transcription-simple-view">
+                                <div v-for="(segment, index) in processedTranscription.simpleSegments"
+                                     :key="segment.startTime ?? Math.random()"
+                                     :class="['speaker-segment cursor-pointer hover:bg-[var(--bg-accent-hover)] p-2 rounded transition-colors mb-2', { 'active-playing-segment': currentPlayingSegmentIndex === index }]"
+                                     :data-start-time="segment.startTime"
+                                     :data-end-time="segment.endTime"
+                                     :data-segment-index="index"
+                                     style="margin-bottom: 0.5rem !important;">
+                                    <div v-if="segment.showSpeaker" :class="['speaker-tablet', segment.color]">
+                                        ${segment.speaker}
+                                    </div>
+                                    <div class="speaker-text">
+                                        ${segment.sentence}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bubble View -->
+                            <div v-else-if="transcriptView === 'bubble'" class="transcription-with-speakers">
+                                <div v-for="(row, rowIndex) in processedTranscription.bubbleRows"
+                                     :key="rowIndex"
+                                     :class="['bubble-row', row.isMe ? 'speaker-me' : '']">
+                                    <div v-for="(bubble, bubbleIndex) in row.bubbles"
+                                         :key="bubble.startTime ?? Math.random()"
+                                         :class="['speaker-bubble', bubble.color, row.isMe ? 'speaker-me' : '', 'cursor-pointer', { 'active-playing-segment': currentPlayingSegmentIndex === getBubbleGlobalIndex(rowIndex, bubbleIndex) }]"
+                                         :data-start-time="bubble.startTime"
+                                         :data-end-time="bubble.endTime"
+                                         :data-segment-index="getBubbleGlobalIndex(rowIndex, bubbleIndex)">
+                                        <div class="speaker-bubble-content">
+                                            ${bubble.sentence}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Plain Text View (for non-JSON transcriptions) -->
+                            <div v-if="!processedTranscription.isJson" class="whitespace-pre-wrap bidi-auto cursor-pointer hover:bg-[var(--bg-accent-hover)] p-2 rounded transition-colors">
+                                ${processedTranscription.content}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Summary View -->
+                    {% if recording.summary %}
+                    <div v-show="activeTab === 'summary'" class="w-full flex-1 flex flex-col overflow-hidden">
+                        <div class="flex items-center justify-end mb-4 flex-shrink-0">
+                            <button @click="copySummary" class="copy-btn">
+                                <i class="fas fa-copy mr-1"></i>Copy
+                            </button>
+                        </div>
+                        <div class="w-full flex-1 overflow-y-auto summary-box">
+                            {{ recording.summary|safe }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Notes View -->
+                    {% if recording.notes %}
+                    <div v-show="activeTab === 'notes'" class="w-full flex-1 flex flex-col overflow-hidden">
+                        <div class="flex items-center justify-end mb-4 flex-shrink-0">
+                            <button @click="copyNotes" class="copy-btn">
+                                <i class="fas fa-copy mr-1"></i>Copy
+                            </button>
+                        </div>
+                        <div class="w-full flex-1 overflow-y-auto notes-box">
+                            {{ recording.notes|safe }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] py-4 px-4 flex-shrink-0">
+            <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-[var(--text-muted)]">
+                <div class="flex items-center gap-2">
+                    <span>&copy; {{ now.year }} Speakr</span>
+                    <span class="hidden sm:inline">•</span>
+                    <span class="text-xs">Powered by advanced AI transcription</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs">Built with</span>
+                    <a href="https://github.com/murtaza-nasir/speakr"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="inline-flex items-center gap-1 text-[var(--text-accent)] hover:text-[var(--text-primary)] transition-colors font-medium">
+                        <i class="fab fa-github text-sm"></i>
+                        <span>Speakr</span>
+                        <i class="fas fa-external-link-alt text-xs opacity-70"></i>
+                    </a>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Toast Container -->
+        <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        const app = createApp({
+            setup() {
+                const appElement = document.querySelector('#app');
+                const recordingData = JSON.parse(appElement.dataset.recording);
+                const recording = ref(recordingData);
+                const activeTab = ref('transcription');
+                const transcriptView = ref('simple');
+                const audioPlayer = ref(null);
+                const legendExpanded = ref(false);
+                const isDarkMode = ref(document.documentElement.classList.contains('dark'));
+
+                // Readable mode flag from server
+                const readableMode = {{ 'true' if readable_mode else 'false' }};
+                const currentPlayingSegmentIndex = ref(-1);
+                const followPlayerMode = ref(localStorage.getItem('shareFollowPlayerMode') === 'true');
+
+                // Server-rendered transcript info (only used in readable mode)
+                const hasDialogue = ref({{ 'true' if transcript and transcript.has_speakers else 'false' }});
+                const plainTextTranscript = {{ (transcript.plain_text if transcript else '')|tojson|safe }};
+
+                // Custom audio player state
+                const audioIsPlaying = ref(false);
+                const audioCurrentTime = ref(0);
+                // Use server-side duration if available (more reliable for formats like WebM)
+                const audioDuration = ref(recordingData.audio_duration || 0);
+                const audioIsMuted = ref(false);
+                const playerVolume = ref(1.0);
+
+                // Playback speed state
+                const playbackRate = ref(1.0);
+                const showSpeedMenu = ref(false);
+                const playbackSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+
+                // Computed property for progress percentage
+                const audioProgressPercent = computed(() => {
+                    if (!audioDuration.value) return 0;
+                    return (audioCurrentTime.value / audioDuration.value) * 100;
+                });
+
+                // Format time as m:ss or h:mm:ss
+                function formatAudioTime(seconds) {
+                    if (!seconds || isNaN(seconds)) return '0:00';
+                    const hours = Math.floor(seconds / 3600);
+                    const mins = Math.floor((seconds % 3600) / 60);
+                    const secs = Math.floor(seconds % 60);
+                    if (hours > 0) {
+                        return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    }
+                    return `${mins}:${secs.toString().padStart(2, '0')}`;
+                }
+
+                // Audio event handlers
+                function handleAudioPlayPause(event) {
+                    audioIsPlaying.value = !event.target.paused;
+                }
+
+                function handleCustomAudioTimeUpdate(event) {
+                    audioCurrentTime.value = event.target.currentTime;
+                    updateHighlightedSegment(event.target.currentTime);
+                }
+
+                function updateHighlightedSegment(currentTime) {
+                    // Find all segments and determine which one is currently playing
+                    const segments = document.querySelectorAll('[data-segment-index]');
+                    let newIndex = -1;
+
+                    segments.forEach((el) => {
+                        const startTime = parseFloat(el.dataset.startTime) || 0;
+                        const endTime = parseFloat(el.dataset.endTime) || Infinity;
+                        const index = parseInt(el.dataset.segmentIndex);
+
+                        if (currentTime >= startTime && currentTime < endTime) {
+                            newIndex = index;
+                        }
+
+                        // Update highlight class
+                        if (currentTime >= startTime && currentTime < endTime) {
+                            el.classList.add('active-playing-segment');
+                        } else {
+                            el.classList.remove('active-playing-segment');
+                        }
+                    });
+
+                    currentPlayingSegmentIndex.value = newIndex;
+
+                    // Auto-scroll to active segment if follow mode is on
+                    if (followPlayerMode.value && newIndex >= 0) {
+                        const activeEl = document.querySelector(`[data-segment-index="${newIndex}"]`);
+                        if (activeEl) {
+                            activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }
+                }
+
+                function toggleFollowPlayerMode() {
+                    followPlayerMode.value = !followPlayerMode.value;
+                    localStorage.setItem('shareFollowPlayerMode', followPlayerMode.value);
+                    if (followPlayerMode.value && currentPlayingSegmentIndex.value >= 0) {
+                        const activeEl = document.querySelector(`[data-segment-index="${currentPlayingSegmentIndex.value}"]`);
+                        if (activeEl) {
+                            activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }
+                }
+
+                function handleAudioLoadedMetadata(event) {
+                    // Only set browser duration if we don't already have a server-side duration
+                    if (!audioDuration.value || audioDuration.value === 0) {
+                        const duration = event.target.duration;
+                        if (duration && isFinite(duration) && duration > 0) {
+                            audioDuration.value = duration;
+                        }
+                    }
+                    // Apply saved playback rate when audio loads
+                    if (playbackRate.value !== 1) {
+                        event.target.playbackRate = playbackRate.value;
+                    }
+                }
+
+                function handleAudioDurationChange(event) {
+                    // Only set browser duration if we don't already have a server-side duration
+                    if (!audioDuration.value || audioDuration.value === 0) {
+                        const duration = event.target.duration;
+                        if (duration && isFinite(duration) && duration > 0) {
+                            audioDuration.value = duration;
+                        }
+                    }
+                }
+
+                function handleAudioEnded() {
+                    audioIsPlaying.value = false;
+                }
+
+                // Audio control functions
+                function toggleAudioPlayback() {
+                    if (!audioPlayer.value) return;
+                    if (audioPlayer.value.paused) {
+                        audioPlayer.value.play();
+                    } else {
+                        audioPlayer.value.pause();
+                    }
+                }
+
+                function toggleAudioMute() {
+                    if (!audioPlayer.value) return;
+                    audioPlayer.value.muted = !audioPlayer.value.muted;
+                    audioIsMuted.value = audioPlayer.value.muted;
+                }
+
+                function setAudioVolume(value) {
+                    if (!audioPlayer.value) return;
+                    playerVolume.value = value;
+                    audioPlayer.value.volume = value;
+                    if (value > 0 && audioIsMuted.value) {
+                        audioPlayer.value.muted = false;
+                        audioIsMuted.value = false;
+                    }
+                }
+
+                function seekAudioByPercent(percent) {
+                    if (!audioPlayer.value || !audioDuration.value || !isFinite(audioDuration.value)) return;
+                    const time = (percent / 100) * audioDuration.value;
+                    audioPlayer.value.currentTime = time;
+                }
+
+                // Playback speed functions
+                function formatPlaybackRate(rate) {
+                    if (rate === 1) return '1x';
+                    return `${rate}x`;
+                }
+
+                function setPlaybackRate(rate) {
+                    playbackRate.value = rate;
+                    localStorage.setItem('playbackRate', rate);
+                    if (audioPlayer.value) {
+                        audioPlayer.value.playbackRate = rate;
+                    }
+                }
+
+                // Initialize playback rate from localStorage
+                const savedRate = localStorage.getItem('playbackRate');
+                if (savedRate) {
+                    const rate = parseFloat(savedRate);
+                    if (playbackSpeeds.includes(rate)) {
+                        playbackRate.value = rate;
+                    }
+                }
+
+                // processedTranscription computed property (used in Vue mode, not readable mode)
+                const processedTranscription = computed(() => {
+                    if (readableMode) {
+                        // In readable mode, content is server-rendered, so just return minimal info
+                        return { hasDialogue: hasDialogue.value, isJson: true, speakers: [], simpleSegments: [], bubbleRows: [] };
+                    }
+
+                    if (!recording.value?.transcription) {
+                        return { hasDialogue: false, content: '', speakers: [], simpleSegments: [], bubbleRows: [] };
+                    }
+
+                    const transcription = recording.value.transcription;
+                    let transcriptionData;
+
+                    try {
+                        transcriptionData = JSON.parse(transcription);
+                    } catch (e) {
+                        transcriptionData = null;
+                    }
+
+                    if (transcriptionData && Array.isArray(transcriptionData)) {
+                        const wasDiarized = transcriptionData.some(segment => segment.speaker);
+
+                        if (!wasDiarized) {
+                            const segments = transcriptionData.map(segment => ({
+                                sentence: segment.sentence,
+                                startTime: segment.start_time,
+                                endTime: segment.end_time
+                            }));
+                            return {
+                                hasDialogue: false,
+                                isJson: true,
+                                content: segments.map(s => s.sentence).join('\n'),
+                                simpleSegments: segments,
+                                speakers: [],
+                                bubbleRows: []
+                            };
+                        }
+
+                        const speakers = [...new Set(transcriptionData.map(segment => segment.speaker).filter(Boolean))];
+                        const speakerColors = {};
+                        speakers.forEach((speaker, index) => {
+                            speakerColors[speaker] = `speaker-color-${(index % 8) + 1}`;
+                        });
+
+                        const simpleSegments = transcriptionData.map(segment => ({
+                            speakerId: segment.speaker,
+                            speaker: segment.speaker,
+                            sentence: segment.sentence,
+                            startTime: segment.start_time ?? segment.startTime,
+                            endTime: segment.end_time ?? segment.endTime,
+                            color: speakerColors[segment.speaker] || 'speaker-color-1'
+                        }));
+
+                        const processedSimpleSegments = [];
+                        let lastSpeaker = null;
+                        simpleSegments.forEach(segment => {
+                            processedSimpleSegments.push({
+                                ...segment,
+                                showSpeaker: segment.speaker !== lastSpeaker
+                            });
+                            lastSpeaker = segment.speaker;
+                        });
+
+                        const bubbleRows = [];
+                        let lastBubbleSpeaker = null;
+                        simpleSegments.forEach(segment => {
+                            if (bubbleRows.length === 0 || segment.speaker !== lastBubbleSpeaker) {
+                                bubbleRows.push({
+                                    speaker: segment.speaker,
+                                    color: segment.color,
+                                    isMe: segment.speaker && (typeof segment.speaker === 'string') && segment.speaker.toLowerCase().includes('me'),
+                                    bubbles: []
+                                });
+                                lastBubbleSpeaker = segment.speaker;
+                            }
+                            bubbleRows[bubbleRows.length - 1].bubbles.push({
+                                sentence: segment.sentence,
+                                startTime: segment.startTime ?? segment.start_time,
+                                endTime: segment.endTime ?? segment.end_time,
+                                color: segment.color
+                            });
+                        });
+
+                        return {
+                            hasDialogue: true,
+                            isJson: true,
+                            segments: simpleSegments,
+                            simpleSegments: processedSimpleSegments,
+                            bubbleRows: bubbleRows,
+                            speakers: speakers.map(speaker => ({
+                                name: speaker,
+                                color: speakerColors[speaker]
+                            }))
+                        };
+                    }
+                    return { hasDialogue: false, content: transcription, speakers: [], simpleSegments: [], bubbleRows: [] };
+                });
+
+                // Helper to get global index for bubble view highlighting
+                function getBubbleGlobalIndex(rowIndex, bubbleIndex) {
+                    let globalIndex = 0;
+                    for (let i = 0; i < rowIndex; i++) {
+                        globalIndex += processedTranscription.value.bubbleRows[i]?.bubbles?.length || 0;
+                    }
+                    return globalIndex + bubbleIndex;
+                }
+
+                function seekAudio(startTime) {
+                    if (recording.value.audio_deleted_at) return;
+                    if (startTime && audioPlayer.value) {
+                        audioPlayer.value.currentTime = parseFloat(startTime);
+                        audioPlayer.value.play();
+                    }
+                }
+
+                function handleTranscriptClick(event) {
+                    if (recording.value.audio_deleted_at) return;
+                    // Use closest() to find the segment element even when clicking on child elements
+                    const segmentEl = event.target.closest('[data-start-time]');
+                    if (segmentEl && audioPlayer.value) {
+                        const startTime = segmentEl.dataset.startTime;
+                        audioPlayer.value.currentTime = parseFloat(startTime);
+                        audioPlayer.value.play();
+                    }
+                }
+
+                function copyTranscript(event) {
+                    const button = event?.currentTarget;
+                    let textToCopy = '';
+                    if (readableMode) {
+                        // Use server-provided plain text (already formatted with speaker labels if diarized)
+                        textToCopy = plainTextTranscript || recording.value.transcription;
+                    } else {
+                        // Use Vue-computed data
+                        if (processedTranscription.value.isJson && processedTranscription.value.simpleSegments) {
+                            textToCopy = processedTranscription.value.simpleSegments.map(s =>
+                                s.speaker ? `[${s.speaker}]: ${s.sentence}` : s.sentence
+                            ).join('\n');
+                        } else {
+                            textToCopy = recording.value.transcription;
+                        }
+                    }
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        animateCopyButton(button);
+                        showToast('Transcription copied to clipboard!');
+                    });
+                }
+
+                function copySummary(event) {
+                    const button = event?.currentTarget;
+                    const textToCopy = recording.value.summary_raw || recording.value.summary;
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        animateCopyButton(button);
+                        showToast('Summary copied to clipboard!');
+                    });
+                }
+
+                function copyNotes(event) {
+                    const button = event?.currentTarget;
+                    const textToCopy = recording.value.notes_raw || recording.value.notes;
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        animateCopyButton(button);
+                        showToast('Notes copied to clipboard!');
+                    });
+                }
+
+                function animateCopyButton(button) {
+                    if (!button) return;
+                    const icon = button.querySelector('i');
+                    if (icon) {
+                        const originalClass = icon.className;
+                        icon.className = 'fas fa-check mr-1';
+                        setTimeout(() => {
+                            icon.className = originalClass;
+                        }, 2000);
+                    }
+                }
+
+                function toggleDarkMode() {
+                    const newDarkMode = !isDarkMode.value;
+                    isDarkMode.value = newDarkMode;
+
+                    if (newDarkMode) {
+                        document.documentElement.classList.add('dark');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                    }
+
+                    localStorage.setItem('darkMode', newDarkMode.toString());
+                }
+
+                function showToast(message) {
+                    const container = document.getElementById('toastContainer');
+                    const toast = document.createElement('div');
+                    toast.className = 'toast bg-[var(--bg-success)] text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 pointer-events-auto';
+                    toast.style.cursor = 'pointer';
+                    toast.innerHTML = `<i class="fas fa-check"></i>${message}`;
+
+                    container.appendChild(toast);
+
+                    // Trigger animation
+                    setTimeout(() => toast.classList.add('show'), 10);
+
+                    // Function to dismiss the toast
+                    const dismissToast = () => {
+                        toast.classList.remove('show');
+                        setTimeout(() => {
+                            if (toast.parentNode) {
+                                container.removeChild(toast);
+                            }
+                        }, 300);
+                    };
+
+                    // Add click handler to dismiss toast
+                    toast.addEventListener('click', () => {
+                        clearTimeout(timeoutId);
+                        dismissToast();
+                    });
+
+                    // Auto-dismiss after 3 seconds
+                    const timeoutId = setTimeout(dismissToast, 3000);
+                }
+
+                return {
+                    recording,
+                    activeTab,
+                    transcriptView,
+                    audioPlayer,
+                    readableMode,
+                    hasDialogue,
+                    processedTranscription,
+                    currentPlayingSegmentIndex,
+                    followPlayerMode,
+                    toggleFollowPlayerMode,
+                    getBubbleGlobalIndex,
+                    legendExpanded,
+                    isDarkMode,
+                    seekAudio,
+                    handleTranscriptClick,
+                    copyTranscript,
+                    copySummary,
+                    copyNotes,
+                    toggleDarkMode,
+                    // Custom audio player
+                    audioIsPlaying,
+                    audioCurrentTime,
+                    audioDuration,
+                    audioIsMuted,
+                    playerVolume,
+                    audioProgressPercent,
+                    formatAudioTime,
+                    handleAudioPlayPause,
+                    handleCustomAudioTimeUpdate,
+                    handleAudioLoadedMetadata,
+                    handleAudioDurationChange,
+                    handleAudioEnded,
+                    toggleAudioPlayback,
+                    toggleAudioMute,
+                    setAudioVolume,
+                    seekAudioByPercent,
+                    // Playback speed
+                    playbackRate,
+                    showSpeedMenu,
+                    playbackSpeeds,
+                    formatPlaybackRate,
+                    setPlaybackRate
+                };
+            }
+        });
+
+        app.config.compilerOptions.delimiters = ['${', '}'];
+        app.mount('#app');
+
+        // Hide loading overlay after app mounts
+        Vue.nextTick(() => {
+            if (window.AppLoader) {
+                AppLoader.waitForReady();
+            }
+        });
+    </script>
+</body>
+</html>

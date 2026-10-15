@@ -1,0 +1,677 @@
+#!/usr/bin/env python3
+"""
+File Monitor for Automated Audio Processing
+Monitors directories for new audio files and automatically processes them.
+Supports multiple user modes:
+1. Admin-only: Files go to admin user only
+2. User-specific directories: Each user has their own folder (e.g., /auto-process/user123/)
+3. Single default user: All files go to one specified user
+"""
+
+import os
+import time
+import threading
+import logging
+from datetime import datetime
+from pathlib import Path
+import mimetypes
+from werkzeug.utils import secure_filename
+from src.utils.ffprobe import get_codec_info, get_creation_date, get_duration, FFProbeError
+from src.utils.ffmpeg_utils import FFmpegError, FFmpegNotFoundError
+from src.utils.audio_conversion import convert_if_needed
+
+# Video retention - when enabled, video files keep their video stream for playback
+VIDEO_RETENTION = os.environ.get('VIDEO_RETENTION', 'false').lower() == 'true'
+
+# Video passthrough - send original video files directly to ASR without extracting audio
+VIDEO_PASSTHROUGH_ASR = os.environ.get('VIDEO_PASSTHROUGH_ASR', 'false').lower() == 'true'
+
+# Flask app components will be imported inside functions to avoid circular imports
+
+class FileMonitor:
+    def __init__(self, base_watch_directory, check_interval=30, mode='admin_only'):
+        """
+        Initialize the file monitor.
+        
+        Args:
+            base_watch_directory (str): Base directory to monitor for new files
+            check_interval (int): How often to check for new files (seconds)
+            mode (str): Processing mode - 'admin_only', 'user_directories', or 'single_user'
+        """
+        self.base_watch_directory = Path(base_watch_directory)
+        self.check_interval = check_interval
+        self.mode = mode
+        self.running = False
+        self.thread = None
+        
+        # Ensure base directory exists
+        self.base_watch_directory.mkdir(parents=True, exist_ok=True)
+        
+        # Setup logging
+        self.logger = logging.getLogger('file_monitor')
+        self.logger.setLevel(logging.INFO)
+        
+        # Supported audio file extensions
+        # We'll use ffprobe to detect audio files instead of extensions
+        # Keep a basic list for initial filtering to avoid probing every file
+        self.potential_audio_extensions = {
+            '.wav', '.mp3', '.flac', '.amr', '.3gp', '.3gpp', 
+            '.m4a', '.aac', '.ogg', '.wma', '.webm', '.mp4', '.mov',
+            '.opus', '.caf', '.aiff', '.ts', '.mts', '.mkv', '.avi',
+            '.m4v', '.wmv', '.flv', '.mpeg', '.mpg', '.ogv', '.vob', '.asf'
+        }
+        
+        # Cache for admin user and valid users
+        self._admin_user_id = None
+        self._valid_users = {}  # Maps user_id to username
+        self._username_to_id = {}  # Maps username to user_id
+        self._last_user_cache_update = 0
+
+        # Files left in the folder for the storage quota, logged once (#413)
+        self._quota_skipped = set()
+
+    def start(self):
+        """Start the file monitoring in a background thread."""
+        if self.running:
+            self.logger.warning("File monitor is already running")
+            return
+            
+        self.running = True
+        self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self.thread.start()
+        self.logger.info(f"File monitor started in '{self.mode}' mode, watching: {self.base_watch_directory}")
+        
+    def stop(self):
+        """Stop the file monitoring."""
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=5)
+        self.logger.info("File monitor stopped")
+        
+    def _update_user_cache(self):
+        """Update the cache of valid users and admin user."""
+        current_time = time.time()
+        # Update cache every 5 minutes
+        if current_time - self._last_user_cache_update < 300:
+            return
+        
+        # Import Flask components inside function to avoid circular imports
+        from src.app import app, db, User
+            
+        with app.app_context():
+            try:
+                # Find admin user
+                admin_user = User.query.filter_by(is_admin=True).first()
+                self._admin_user_id = admin_user.id if admin_user else None
+                
+                # Cache all valid users
+                users = User.query.all()
+                self._valid_users = {user.id: user.username for user in users}
+                self._username_to_id = {user.username: user.id for user in users}
+                # Username-named watch folders (#365) also accept the
+                # filesystem-safe variant, matching the per-user export
+                # directories which are created as secure_filename(username).
+                from werkzeug.utils import secure_filename
+                for user in users:
+                    safe = secure_filename(user.username)
+                    if safe and safe not in self._username_to_id:
+                        self._username_to_id[safe] = user.id
+                
+                self._last_user_cache_update = current_time
+                self.logger.debug(f"Updated user cache: {len(self._valid_users)} users, admin: {self._admin_user_id}")
+                
+            except Exception as e:
+                self.logger.error(f"Error updating user cache: {e}")
+        
+    def _monitor_loop(self):
+        """Main monitoring loop."""
+        while self.running:
+            try:
+                self._update_user_cache()
+                
+                if self.mode == 'admin_only':
+                    self._scan_admin_directory()
+                elif self.mode == 'user_directories':
+                    self._scan_user_directories()
+                elif self.mode == 'single_user':
+                    self._scan_single_user_directory()
+                    
+            except Exception as e:
+                self.logger.error(f"Error during directory scan: {e}", exc_info=True)
+            
+            # Wait for next check
+            time.sleep(self.check_interval)
+            
+    def _scan_admin_directory(self):
+        """Scan the main directory for files to process as admin user."""
+        if not self._admin_user_id:
+            self.logger.warning("No admin user found, skipping admin directory scan")
+            return
+
+        self._scan_directory_for_user(self.base_watch_directory, self._admin_user_id)
+        self._scan_tag_subdirectories(self.base_watch_directory, self._admin_user_id)
+
+    def _scan_user_directories(self):
+        """Scan user-specific subdirectories."""
+        if not self.base_watch_directory.exists():
+            return
+
+        # Look for user directories, either id-based (user123, 123) or named
+        # after the username itself (#365, consistent with export folders).
+        for item in self.base_watch_directory.iterdir():
+            if not item.is_dir():
+                continue
+
+            # Extract user ID from directory name
+            user_id = self._extract_user_id_from_dirname(item.name)
+            if user_id and user_id in self._valid_users:
+                self._scan_directory_for_user(item, user_id)
+                self._scan_tag_subdirectories(item, user_id)
+                continue
+
+            # Fall back to matching the directory name against usernames
+            # (raw or secure_filename form).
+            username_user_id = self._username_to_id.get(item.name)
+            if username_user_id:
+                self._scan_directory_for_user(item, username_user_id)
+                self._scan_tag_subdirectories(item, username_user_id)
+            elif item.name.startswith('user'):
+                self.logger.warning(f"Found user directory '{item.name}' but user ID {user_id} is not valid")
+
+    def _scan_single_user_directory(self):
+        """Scan directory for a single configured user."""
+        default_username = os.environ.get('AUTO_PROCESS_DEFAULT_USERNAME')
+        if not default_username:
+            self.logger.warning("AUTO_PROCESS_DEFAULT_USERNAME not configured for single_user mode")
+            return
+
+        user_id = self._username_to_id.get(default_username)
+        if user_id:
+            self._scan_directory_for_user(self.base_watch_directory, user_id)
+            self._scan_tag_subdirectories(self.base_watch_directory, user_id)
+        else:
+            self.logger.warning(f"Configured default username '{default_username}' is not valid")
+
+    def _scan_tag_subdirectories(self, directory, user_id):
+        """Scan subdirectories that match auto-process tag folders."""
+        if not directory.exists():
+            return
+
+        from src.app import app
+        from src.models import Tag
+
+        with app.app_context():
+            for item in directory.iterdir():
+                if not item.is_dir():
+                    continue
+
+                # Skip hidden dirs and user directories (e.g., user123)
+                if item.name.startswith('.') or self._extract_user_id_from_dirname(item.name) is not None:
+                    continue
+
+                # Look up matching auto-process tag
+                tag = Tag.query.filter_by(
+                    user_id=user_id,
+                    is_auto_process=True,
+                    auto_process_folder_name=item.name
+                ).first()
+
+                if tag:
+                    self._scan_directory_for_user(item, user_id, tag_id=tag.id)
+            
+    def _scan_directory_for_user(self, directory, user_id, tag_id=None):
+        """Scan a specific directory for files to process for a specific user."""
+        if not directory.exists():
+            return
+
+        for file_path in directory.iterdir():
+            if not file_path.is_file():
+                continue
+
+            # Skip hidden files, processing files, or non-supported files
+            if file_path.name.startswith('.') or file_path.suffix == '.processing':
+                continue
+
+            if file_path.suffix.lower() not in self.potential_audio_extensions:
+                continue
+
+            # Check if file is still being written (size stability check)
+            stability_time = int(os.environ.get('AUTO_PROCESS_STABILITY_TIME', '5'))
+            try:
+                if not self._is_file_stable(file_path, stability_time):
+                    continue
+            except FileNotFoundError:
+                # File might have been picked up by another worker after iterdir()
+                continue
+
+            self.logger.info(f"Found potential audio file for user {user_id}: {file_path}")
+
+            # --- Atomic Lock via Rename ---
+            processing_path = file_path.with_suffix(file_path.suffix + '.processing')
+
+            try:
+                file_path.rename(processing_path)
+                self.logger.info(f"Acquired lock for {file_path}, renamed to {processing_path}")
+            except FileNotFoundError:
+                self.logger.debug(f"Could not acquire lock for {file_path}, already processed by another worker.")
+                continue
+            except Exception as e:
+                self.logger.error(f"Error acquiring lock for {file_path}: {e}")
+                continue
+
+            # --- Process the locked file ---
+            try:
+                self._process_file(processing_path, user_id, tag_id=tag_id)
+            except Exception as e:
+                self.logger.error(f"Error processing file {processing_path}: {e}", exc_info=True)
+                # If processing fails, unlock the file by renaming it back
+                try:
+                    original_path = processing_path.with_suffix(processing_path.suffix.replace('.processing', ''))
+                    processing_path.rename(original_path)
+                    self.logger.info(f"Unlocked file {processing_path} back to {original_path} after processing error.")
+                except Exception as rename_err:
+                    self.logger.error(f"CRITICAL: Failed to unlock file {processing_path} after error: {rename_err}")
+                
+    def _extract_user_id_from_dirname(self, dirname):
+        """
+        Extract user ID from directory name.
+        
+        Expected formats: user123, 123
+        
+        Args:
+            dirname (str): Directory name
+            
+        Returns:
+            int or None: User ID if found, None otherwise
+        """
+        import re
+        
+        # Pattern: user123 or just 123
+        patterns = [
+            r'^user(\d+)$',  # user123
+            r'^(\d+)$'       # 123
+        ]
+        
+        for pattern in patterns:
+            match = re.match(pattern, dirname, re.IGNORECASE)
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    continue
+                    
+        return None
+        
+    def _is_file_stable(self, file_path, stability_time=5):
+        """
+        Check if a file is stable (not being written to).
+        
+        Args:
+            file_path (Path): Path to the file
+            stability_time (int): Time in seconds to wait for size stability
+            
+        Returns:
+            bool: True if file appears stable
+        """
+        try:
+            initial_size = file_path.stat().st_size
+            initial_mtime = file_path.stat().st_mtime
+            
+            # Wait a bit and check again
+            time.sleep(stability_time)
+            
+            current_size = file_path.stat().st_size
+            current_mtime = file_path.stat().st_mtime
+            
+            # File is stable if size and modification time haven't changed
+            return initial_size == current_size and initial_mtime == current_mtime
+            
+        except (OSError, FileNotFoundError):
+            return False
+            
+    def _process_file(self, processing_path, user_id, tag_id=None):
+        """
+        Process a single locked audio file for a specific user.
+
+        Args:
+            processing_path (Path): Path to the locked audio file (e.g., file.mp3.processing)
+            user_id (int): ID of the user to assign the recording to
+            tag_id (int, optional): Tag ID to apply to the recording
+        """
+        # Import Flask components inside function to avoid circular imports
+        from src.app import app, db, Recording, User, transcribe_audio_task
+        
+        with app.app_context():
+            try:
+                # Verify user exists
+                user = db.session.get(User, user_id)
+                if not user:
+                    self.logger.error(f"User ID {user_id} not found in database for file {processing_path}")
+                    # We must raise an exception to trigger the unlock mechanism
+                    raise ValueError(f"User ID {user_id} not found")
+
+                # Derive original filename by removing .processing suffix
+                original_filename = processing_path.name.replace('.processing', '')
+
+                # Storage quota (#413): a file that does not fit stays in the
+                # folder untouched and is tried again on later scans; the user
+                # gets one notification, resolved when there is room.
+                from src.services.storage_quota import check_room, StorageQuotaExceeded, raise_notice
+                try:
+                    check_room(user, processing_path.stat().st_size)
+                except StorageQuotaExceeded as quota_error:
+                    original_path = processing_path.with_name(original_filename)
+                    processing_path.rename(original_path)
+                    if str(original_path) not in self._quota_skipped:
+                        self._quota_skipped.add(str(original_path))
+                        self.logger.info(f"Left {original_path} in the watch folder: {quota_error}")
+                        raise_notice(user, quota_error, original_filename)
+                    return
+                self._quota_skipped.discard(str(processing_path.with_name(original_filename)))
+                safe_filename = secure_filename(original_filename)
+                timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+                new_filename = f"auto_{timestamp}_{safe_filename}"
+                
+                from src.services.storage import get_storage_service
+
+                storage = get_storage_service()
+                staging_dir = Path(storage.get_staging_dir())
+                staging_dir.mkdir(parents=True, exist_ok=True)
+                destination_path = staging_dir / new_filename
+                
+                # Copy locked file to uploads directory
+                import shutil
+                shutil.copy(str(processing_path), str(destination_path))
+                self.logger.info(f"Copied {processing_path} to {destination_path}")
+                
+                # Delete the locked file from watch directory after successful copy
+                try:
+                    processing_path.unlink()
+                    self.logger.info(f"Deleted locked file: {processing_path}")
+                except FileNotFoundError:
+                    # This should not happen if the lock is held, but good to log
+                    self.logger.warning(f"Locked file {processing_path} was already deleted.")
+                
+                # Compute file hash on the ORIGINAL file before any conversion/compression.
+                # Lossy re-encoding produces different bytes each run, so hashing after
+                # conversion would miss duplicates.
+                file_hash = None
+                try:
+                    from src.utils.file_hash import compute_file_sha256
+                    file_hash = compute_file_sha256(str(destination_path))
+                except Exception as e:
+                    self.logger.warning(f"Could not compute file hash: {e}")
+
+                # Probe once to get codec info, then pass through pipeline to avoid redundant calls
+                codec_info = None
+                try:
+                    codec_info = get_codec_info(str(destination_path), timeout=10)
+                    self.logger.info(f"Detected codec for {original_filename}: audio_codec={codec_info.get('audio_codec')}, has_video={codec_info.get('has_video', False)}")
+                except FFProbeError as e:
+                    self.logger.warning(f"Failed to probe {original_filename}: {e}. Will attempt conversion.")
+                
+                # Get connector specs for codec restrictions
+                connector_specs = None
+                try:
+                    from src.services.transcription import get_registry
+                    registry = get_registry()
+                    connector = registry.get_active_connector()
+                    if connector:
+                        connector_specs = connector.specifications
+                except Exception as e:
+                    self.logger.warning(f"Could not get connector specs: {e}")
+
+                # Check if this is a video file (for video retention logic)
+                has_video = codec_info.get('has_video', False) if codec_info else False
+
+                # Video passthrough or retention: skip conversion for videos
+                if (VIDEO_PASSTHROUGH_ASR or VIDEO_RETENTION) and has_video:
+                    self.logger.info(f"Video {'passthrough' if VIDEO_PASSTHROUGH_ASR else 'retention'}: keeping original video, skipping conversion")
+                    final_path = destination_path
+                else:
+                    # Convert/compress file if necessary - convert_if_needed handles ALL conversion needs
+                    try:
+                        result = convert_if_needed(
+                            str(destination_path),
+                            original_filename=original_filename,
+                            codec_info=codec_info,
+                            needs_chunking=False,
+                            is_asr_endpoint=False,
+                            delete_original=True,  # Clean up original after conversion
+                            connector_specs=connector_specs  # Pass connector specs for codec restrictions
+                        )
+                        final_path = Path(result.output_path)
+
+                        # Log what happened
+                        if result.was_converted:
+                            self.logger.info(f"File converted: {result.original_codec} -> {result.final_codec}")
+                        if result.was_compressed:
+                            self.logger.info(f"File compressed: {result.size_reduction_percent:.1f}% size reduction")
+
+                    except FFmpegNotFoundError as e:
+                        self.logger.error(f"FFmpeg not found: {e}")
+                        raise
+                    except FFmpegError as e:
+                        self.logger.error(f"FFmpeg conversion failed: {e}")
+                        raise
+
+                # (file_hash already computed above, before conversion)
+
+                # Get file size and MIME type
+                file_size = final_path.stat().st_size
+                mime_type, _ = mimetypes.guess_type(str(final_path))
+
+                # Create database record
+                now = datetime.utcnow()
+
+                # Filename-parsed date first when the owner opted in (#342):
+                # the configured pattern is explicit user intent, so it
+                # outranks embedded metadata. No client timezone exists on
+                # this path, so date-only matches anchor at 12:00 UTC.
+                meeting_date = None
+                if user and user.parse_filename_dates:
+                    from src.utils.filename_dates import parse_filename_date
+                    meeting_date = parse_filename_date(
+                        original_filename,
+                        pattern_key=user.filename_date_pattern or 'auto',
+                        custom_regex=user.filename_date_regex,
+                    )
+                    if meeting_date:
+                        self.logger.info(f"Using filename-parsed meeting date: {meeting_date}")
+
+                # Try to extract creation date from file metadata, fall back to current time
+                if not meeting_date:
+                    # Normalised to naive UTC like the upload path (#412 B6).
+                    from src.utils.dates import to_utc_naive
+                    meeting_date = to_utc_naive(get_creation_date(str(final_path)))
+                    if meeting_date:
+                        self.logger.info(f"Using file metadata creation date: {meeting_date}")
+                    else:
+                        meeting_date = now
+                        self.logger.debug("No metadata creation date found, using current time")
+
+                # Check for duplicate
+                if file_hash:
+                    existing = Recording.query.filter_by(user_id=user_id, file_hash=file_hash).first()
+                    if existing:
+                        self.logger.warning(
+                            f"Duplicate file detected for user {user_id}: "
+                            f"hash={file_hash[:12]}... matches recording {existing.id} "
+                            f"({existing.title}). Processing anyway."
+                        )
+
+                audio_duration_seconds = None
+                try:
+                    detected_duration = get_duration(str(final_path), timeout=30)
+                    if detected_duration is not None and detected_duration > 0:
+                        audio_duration_seconds = float(detected_duration)
+                except Exception as e:
+                    self.logger.warning(f"Could not determine duration for auto-processed file {original_filename}: {e}")
+
+                recording = Recording(
+                    audio_path=None,
+                    original_filename=original_filename,
+                    title=f"Auto-processed - {original_filename}",
+                    file_size=file_size,
+                    status='PENDING',
+                    meeting_date=meeting_date,
+                    user_id=user_id,
+                    mime_type=mime_type,
+                    audio_duration_seconds=audio_duration_seconds,
+                    is_inbox=True,  # Auto-processed files go to inbox
+                    processing_source='auto_process',  # Track that this was auto-processed
+                    file_hash=file_hash
+                )
+                
+                db.session.add(recording)
+                db.session.flush()
+
+                storage_key = storage.build_recording_key(original_filename, recording.id, now=now)
+                stored_object = storage.upload_local_file(
+                    str(final_path),
+                    storage_key,
+                    content_type=mime_type,
+                    delete_source=True,
+                )
+                recording.audio_path = stored_object.locator
+
+                self.logger.info(f"Created recording record with ID: {recording.id} for user: {user.username}")
+
+                # Apply tag if specified (so the recording carries it before we
+                # resolve transcribe params below).
+                if tag_id:
+                    from src.models import Tag, RecordingTag
+                    tag = db.session.get(Tag, tag_id)
+                    if tag:
+                        recording_tag = RecordingTag(
+                            recording_id=recording.id,
+                            tag_id=tag_id,
+                            order=0
+                        )
+                        db.session.add(recording_tag)
+                        db.session.commit()
+                        self.logger.info(f"Applied tag '{tag.name}' (id={tag_id}) to recording {recording.id}")
+
+                db.session.commit()
+                from src.services.webhook_dispatch import emit_recording_created
+                emit_recording_created(recording)
+
+                # Resolve transcribe params through the shared chain so an
+                # auto-processed file honors the same tag/folder/env/account
+                # defaults (speaker hints, model, hotwords, prompt) as a normal
+                # upload — previously this path only forwarded a thin subset.
+                from src.services.transcription_defaults import resolve_transcription_params
+                job_params = resolve_transcription_params(recording)
+
+                # Queue for background processing
+                from src.services.job_queue import job_queue
+                job_queue.enqueue(
+                    user_id=user.id,
+                    recording_id=recording.id,
+                    job_type='transcribe',
+                    params=job_params,
+                    is_new_upload=True
+                )
+
+                self.logger.info(f"Queued background processing for recording ID: {recording.id}")
+                self.logger.info(f"Successfully processed and moved file from: {processing_path}")
+                    
+            except Exception as e:
+                self.logger.error(f"Error processing file {processing_path} for user {user_id}: {e}", exc_info=True)
+                # Re-raise the exception to be caught by the calling method, which will handle unlocking.
+                raise
+                
+
+
+
+# Global file monitor instance
+file_monitor = None
+
+def start_file_monitor():
+    """Start the file monitor with configuration from environment variables."""
+    global file_monitor
+    
+    if file_monitor and file_monitor.running:
+        return
+    
+    # Import Flask app inside function to avoid circular imports
+    from src.app import app
+        
+    # Get configuration from environment
+    watch_dir = os.environ.get('AUTO_PROCESS_WATCH_DIR', '/data/auto-process')
+    check_interval = int(os.environ.get('AUTO_PROCESS_CHECK_INTERVAL', '30'))
+    mode = os.environ.get('AUTO_PROCESS_MODE', 'admin_only')  # admin_only, user_directories, single_user
+    
+    # Validate mode
+    valid_modes = ['admin_only', 'user_directories', 'single_user']
+    if mode not in valid_modes:
+        app.logger.error(f"Invalid AUTO_PROCESS_MODE: {mode}. Must be one of: {valid_modes}")
+        return
+            
+    # Only start if auto-processing is enabled
+    if os.environ.get('ENABLE_AUTO_PROCESSING', 'false').lower() == 'true':
+        file_monitor = FileMonitor(
+            base_watch_directory=watch_dir,
+            check_interval=check_interval,
+            mode=mode
+        )
+        file_monitor.start()
+        app.logger.info(f"Automated file processing started in '{mode}' mode")
+
+        # Ensure all auto-process tag folders exist
+        _ensure_tag_folders_on_startup(app, watch_dir, mode)
+    else:
+        app.logger.info("Automated file processing is disabled")
+
+
+def _ensure_tag_folders_on_startup(app, watch_dir, mode):
+    """Ensure all auto-process tag folders exist on startup."""
+    with app.app_context():
+        try:
+            from src.database import db
+            from src.models import Tag
+            from src.models.user import User
+            tags = Tag.query.filter_by(is_auto_process=True).all()
+            if not tags:
+                return
+
+            for tag in tags:
+                user = db.session.get(User, tag.user_id)
+                if not user:
+                    continue
+
+                if mode == 'user_directories':
+                    base_dir = Path(watch_dir) / f'user{user.id}'
+                else:
+                    base_dir = Path(watch_dir)
+
+                if tag.auto_process_folder_name:
+                    folder_path = base_dir / tag.auto_process_folder_name
+                    try:
+                        folder_path.mkdir(parents=True, exist_ok=True)
+                    except OSError as e:
+                        app.logger.error(f"Could not create auto-process folder {folder_path}: {e}")
+
+            app.logger.info(f"Verified {len(tags)} auto-process tag folder(s)")
+        except Exception as e:
+            app.logger.warning(f"Error ensuring tag folders on startup: {e}")
+
+def stop_file_monitor():
+    """Stop the file monitor."""
+    global file_monitor
+    if file_monitor:
+        file_monitor.stop()
+        file_monitor = None
+
+def get_file_monitor_status():
+    """Get the current status of the file monitor."""
+    global file_monitor
+    if file_monitor and file_monitor.running:
+        return {
+            'running': True,
+            'mode': file_monitor.mode,
+            'watch_directory': str(file_monitor.base_watch_directory),
+            'check_interval': file_monitor.check_interval
+        }
+    else:
+        return {'running': False}

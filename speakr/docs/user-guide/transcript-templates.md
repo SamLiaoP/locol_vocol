@@ -1,0 +1,369 @@
+# Transcript Templates Guide
+
+## Overview
+
+Transcript Templates in Speakr allow you to customize how your transcriptions are formatted when downloading them. Instead of a fixed format, you can create multiple templates for different use cases - whether you need timestamps for subtitles, speaker-focused formats for interviews, or screenplay-style formatting for media production.
+
+## Accessing Transcript Templates
+
+1. Click on your username in the top-right corner
+2. Navigate to **Account Settings**
+3. Select the **Transcript Templates** tab
+
+## Understanding Template Variables
+
+Templates use placeholders (variables) that get replaced with actual transcript data:
+
+### Available Variables
+
+- `{{index}}` - Sequential number of the transcript segment (1, 2, 3...)
+- `{{speaker}}` - Name of the speaker (e.g., "Speaker 1", "John", etc.)
+- `{{text}}` - The actual spoken text/content
+- `{{start_time}}` - When the segment starts (format: HH:MM:SS)
+- `{{end_time}}` - When the segment ends (format: HH:MM:SS)
+
+### Filters
+
+Variables can be modified using filters by adding a pipe (|) symbol:
+
+- `{{speaker|upper}}` - Converts speaker name to UPPERCASE
+- `{{text|upper}}` - Converts text to UPPERCASE
+- `{{start_time|srt}}` - Formats time for SRT subtitles (HH:MM:SS,mmm)
+- `{{end_time|srt}}` - Formats time for SRT subtitles (HH:MM:SS,mmm)
+
+## Creating Your First Template
+
+### Step 1: Click "Create Template"
+In the Transcript Templates section, click the **Create Template** button.
+
+### Step 2: Fill in Template Details
+
+**Template Name**: Give your template a descriptive name
+
+- Examples: "Interview Format", "Subtitles SRT", "Meeting Minutes"
+
+**Description** (Optional): Add a brief description of when to use this template
+
+- Example: "Use for client interview transcriptions"
+
+**Template**: Enter your format pattern using variables
+
+- Example: `[{{start_time}}] {{speaker}}: {{text}}`
+
+### Step 3: Set Default (Optional)
+Check "Set as default template" if you want this template to be pre-selected when downloading transcripts.
+
+### Step 4: Save
+Click **Save** to create your template.
+
+## Common Template Examples
+
+### 1. Simple Conversation
+```
+{{speaker}}: {{text}}
+```
+**Output:**
+```
+John: Hello, how are you today?
+Sarah: I'm doing great, thanks for asking!
+```
+
+### 2. Timestamped Format
+```
+[{{start_time}} - {{end_time}}] {{speaker}}: {{text}}
+```
+**Output:**
+```
+[00:00:01 - 00:00:03] John: Hello, how are you today?
+[00:00:04 - 00:00:07] Sarah: I'm doing great, thanks for asking!
+```
+
+### 3. Interview/Q&A Format
+```
+{{speaker|upper}}:
+{{text}}
+
+```
+**Output:**
+```
+INTERVIEWER:
+What brought you to this field?
+
+GUEST:
+I've always been passionate about technology...
+```
+
+### 4. SRT Subtitle Format
+```
+{{index}}
+{{start_time|srt}} --> {{end_time|srt}}
+{{text}}
+
+```
+**Output:**
+```
+1
+00:00:01,000 --> 00:00:03,000
+Hello, how are you today?
+
+2
+00:00:04,000 --> 00:00:07,000
+I'm doing great, thanks for asking!
+```
+
+### 5. Meeting Minutes Style
+```
+• [{{start_time}}] {{speaker}}: {{text}}
+```
+**Output:**
+```
+• [00:00:01] John: Let's begin today's meeting with updates.
+• [00:00:05] Sarah: I'll start with the marketing report.
+```
+
+### 6. Screenplay Format
+```
+                    {{speaker|upper}}
+        {{text}}
+
+```
+**Output:**
+```
+                    JOHN
+        Hello, how are you today?
+
+                    SARAH
+        I'm doing great, thanks for asking!
+```
+
+### 7. Court Transcript Style
+```
+{{index}}    {{speaker|upper}}: {{text}}
+```
+**Output:**
+```
+1    ATTORNEY: Please state your name for the record.
+2    WITNESS: My name is John Smith.
+```
+
+## Using Templates When Downloading
+
+### Method 1: From the Transcript View
+1. Open a recording with a transcription
+2. Click the **Download** button next to the transcript
+3. Select your desired template from the popup
+4. The transcript will download in your chosen format
+
+### Method 2: Set a Default Template
+1. Edit a template and check "Set as default template"
+2. This template will be pre-selected when downloading
+3. You can still choose a different template at download time
+
+### Method 3: Download Raw Transcript
+- Select "No Template (Raw Export)" to download the transcript without any formatting
+- Useful when you need to process the text in another application
+
+## Managing Templates
+
+### Editing Templates
+1. Click on any template in the list to open it
+2. Modify the name, description, or format
+3. Click **Save** to update
+
+### Deleting Templates
+1. Open the template you want to delete
+2. Click the **Delete** button
+3. Confirm the deletion
+
+### Creating Default Templates
+If you have no templates, click **Create Default Templates** to generate a comprehensive set of starter templates:
+
+- Simple Conversation - Clean format with just speaker names
+- Timestamped - Basic format with time ranges
+- Interview Q&A - Professional interview format
+- Meeting Minutes - Bulleted format for meeting notes
+- Court Transcript - Legal deposition style with line numbers
+- SRT Subtitle - Standard subtitle format for content creation
+- Screenplay - Script formatting for creative projects
+
+## Advanced Tips
+
+### 1. Multi-line Templates
+You can create templates with multiple lines by adding line breaks:
+```
+=================
+Time: {{start_time}}
+Speaker: {{speaker}}
+Message: {{text}}
+=================
+```
+
+### 2. Combining Filters
+Use multiple filters in the same template:
+```
+[{{start_time|srt}}] {{speaker|upper}}: {{text}}
+```
+
+### 3. Creating Separators
+Add visual separators between segments:
+```
+{{speaker}}: {{text}}
+---
+```
+
+### 4. Indentation for Readability
+Use spaces or tabs for indentation:
+```
+    {{start_time}} | {{speaker}}
+        {{text}}
+```
+
+## Use Cases
+
+### For Journalists
+Create an "Interview Format" template with timestamps and speaker labels for easy reference when writing articles.
+
+### For Researchers
+Use a numbered format with timestamps to cite specific moments in recorded interviews or focus groups.
+
+### For Content Creators
+Export in SRT format for adding captions to podcasts or other multimedia content, or use screenplay format for creative audio scripts and productions.
+
+### For Business Meetings
+Create a "Meeting Minutes" template that clearly shows who said what and when, perfect for action items and follow-ups.
+
+### For Legal Professionals
+Use court transcript style formatting with line numbers and uppercase speaker names for depositions and testimonies.
+
+### For Podcasters
+Format transcripts for show notes with timestamps that listeners can click to jump to specific topics.
+
+## Integrating with External Tools
+
+Transcript templates become even more powerful when you combine them with external applications. Here are some practical integrations people use:
+
+### Obsidian and Note-Taking Apps
+
+If you use Obsidian, Logseq, or similar markdown-based note apps, you can set up automatic export of your transcripts. Speakr includes an auto-export feature that automatically writes completed transcripts to markdown files.
+
+Enable auto-export by adding these settings to your `.env` file:
+```bash
+ENABLE_AUTO_EXPORT=true
+AUTO_EXPORT_DIR=/data/exports
+AUTO_EXPORT_TRANSCRIPTION=true
+AUTO_EXPORT_SUMMARY=true
+```
+
+Then map the exports directory to your note app's folder in `docker-compose.yml`:
+```yaml
+volumes:
+  - ./uploads:/data/uploads
+  - ./instance:/data/instance
+  - /Users/username/Documents/Obsidian/Transcripts:/data/exports
+```
+
+Create a default transcript template in your Speakr settings that formats the way you want - the auto-export system uses your default template. When a recording finishes processing, Speakr automatically writes a markdown file to the exports directory with metadata, summary, and formatted transcription.
+
+Files are organized into subdirectories by username, so multiple users can export to the same vault without conflicts. Obsidian picks up these markdown files automatically, and you can reference them in daily notes, link them to related content, and search across all your transcripts.
+
+#### Export Filenames
+
+By default, exported files are named `recording_<id>.md`. You can change this with the **export filename template** in your account settings (visible when auto-export is enabled). The template uses the same variable syntax as naming templates: `{{id}}`, `{{title}}`, `{{filename}}` (the original upload's name without extension), and date variables from the meeting date — `{{date}}`, `{{datetime}}`, `{{time}}`, `{{year}}`, `{{month}}`, `{{day}}`. For example, `{{date}} {{title}}` produces `2026-07-16 Team Standup.md`, and `{{filename}}` names the export after the uploaded audio file.
+
+Rendered names are sanitized for filesystem safety (unicode titles are preserved; characters illegal on common filesystems are stripped), and if two recordings would render to the same name, the recording's id is appended to keep them unique. Each recording remembers the filename it was exported under, so re-exports overwrite the same file and deleting a recording renames its export with the `[deleted]_` prefix regardless of which template was active at the time.
+
+Changing the template affects new exports only — files already exported keep their names. A **Rename existing exports** button next to the setting re-renders every existing export under the current template and renames the files on disk in one pass, so your whole vault can be migrated to a new scheme at once. Leaving the template empty returns to the default `recording_<id>` naming.
+
+### Automated Processing Workflows
+
+Mount Speakr's upload directory as a Docker volume pointing to a location your automation tools can access. Create a template that exports in a structured format (like JSON or CSV), then use scripts to process the files automatically.
+
+For example, export client call transcripts to a folder that triggers a script to extract action items and add them to your project management tool. Or export interview transcripts to a research folder where analysis software picks them up for coding and categorization.
+
+The key is creating a template that produces the exact format your downstream tool expects, then using file system watching or scheduled scripts to move the files where they need to go.
+
+### Subtitle and Content Creation Workflows
+
+Create SRT-format templates and export transcripts for use in content creation projects. The SRT format provides time-coded text that can be used for subtitles in multimedia content, podcast show notes with timestamps, or any project where you need synchronized text.
+
+If you're creating multimedia content, you can export these transcripts to folders that your editing software monitors. Some tools watch specific directories for subtitle files - save your Speakr transcripts there, and they appear automatically for integration.
+
+This eliminates the manual export-import-format cycle when you're producing content from your audio recordings.
+
+### Documentation Systems
+
+Groups using wikis or documentation platforms can create templates that match their documentation format. Export meeting transcripts in the right format, clean them up minimally, and publish them to the group wiki. Some groups have scripts that take Speakr exports and create wiki pages automatically, preserving the discussion context for future reference.
+
+### Example: Obsidian Auto-Export Setup
+
+Here's a complete setup for automatic export to Obsidian:
+
+1. **Enable auto-export in `.env`**:
+    ```bash
+    ENABLE_AUTO_EXPORT=true
+    AUTO_EXPORT_DIR=/data/exports
+    AUTO_EXPORT_TRANSCRIPTION=true
+    AUTO_EXPORT_SUMMARY=true
+    ```
+
+2. **Map exports to Obsidian vault in `docker-compose.yml`**:
+    ```yaml
+    volumes:
+     - ./uploads:/data/uploads
+     - ./instance:/data/instance
+     - /Users/username/Documents/Obsidian/Transcripts:/data/exports
+    ```
+
+3. **Create a default transcript template** in Speakr settings with the format you want:
+    ```
+    [{{start_time}}] {{speaker}}: {{text}}
+    ```
+
+4. **Restart Speakr** to apply the changes:
+    ```bash
+    docker compose restart
+    ```
+
+Now when any recording finishes processing, Speakr automatically writes a markdown file to your Obsidian vault with:
+
+- Metadata (date, participants, tags, processing times)
+- Notes (if you added any)
+- AI-generated summary
+- Formatted transcription using your template
+
+Files appear in subdirectories by username, so `alice` gets her transcripts in `Transcripts/alice/` and `bob` gets his in `Transcripts/bob/`. Obsidian indexes these automatically, and you can link to them from daily notes, search across all transcripts, and reference them alongside your other knowledge.
+
+This same approach works with Logseq, Notion (if you set the export directory to Notion's import folder), or any markdown-based knowledge management system.
+
+## Troubleshooting
+
+### Template Not Appearing
+- Ensure you've saved the template
+- Refresh the page if needed
+- Check that you're logged into the correct account
+
+### Variables Not Replacing
+- Verify variable names are spelled correctly
+- Ensure double curly braces `{{}}` are used
+- Check that the transcript has the required data (speakers, timestamps)
+
+### Download Issues
+- Ensure the recording has a completed transcription
+- Try downloading without a template first to verify the transcript exists
+- Check your browser's download settings
+
+## Best Practices
+
+1. **Name Templates Clearly**: Use descriptive names that indicate the purpose
+2. **Test Your Templates**: Download a sample transcript to verify formatting
+3. **Keep Multiple Templates**: Create different templates for different use cases
+4. **Document Complex Templates**: Use the description field to explain when to use each template
+5. **Start Simple**: Begin with basic templates and add complexity as needed
+
+## Need Help?
+
+If you encounter issues or have questions about transcript templates:
+
+1. Check this guide for examples and troubleshooting
+2. Try the default templates as a starting point
+3. Report issues at [GitHub Issues](https://github.com/murtaza-nasir/speakr/issues)

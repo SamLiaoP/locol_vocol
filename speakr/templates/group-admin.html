@@ -1,0 +1,1614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+    <title>Group Management - Speakr</title>
+
+    <!-- Loading overlay to prevent FOUC - MUST be first -->
+    {% include 'includes/loading_overlay.html' %}
+
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/svg+xml">
+        <!-- All dependencies bundled locally for offline support -->
+        <!-- All dependencies bundled locally for offline support -->
+<script src="{{ url_for('static', filename='vendor/js/vue.global.js') }}"></script>
+        <!-- All dependencies bundled locally for offline support -->
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% include 'includes/i18n_bootstrap.html' %}
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
+    <style>
+        /* Hide Vue content until compiled */
+        [v-cloak] {
+            display: none !important;
+        }
+
+        /* Hide scrollbar for tabs */
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Custom select dropdown styling */
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding-right: 2.5rem !important;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 12px 12px;
+        }
+
+        .dark select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23aaa' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        }
+    </style>
+    <script>
+        // Initialize i18n
+        let t = (key) => key; // Default fallback
+        
+        async function initializeI18n() {
+            const userLanguage = "{{ user_language }}";
+            
+            // Initialize the global i18n instance
+            if (window.i18n) {
+                await window.i18n.init(userLanguage);
+                
+                // Create a shorthand translation function
+                t = (key, params) => window.i18n.t(key, params);
+                
+                // Update all elements with data-i18n attribute
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    const key = el.getAttribute('data-i18n');
+                    el.textContent = t(key);
+                });
+                
+                // Update all elements with data-i18n-placeholder attribute
+                document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                    const key = el.getAttribute('data-i18n-placeholder');
+                    el.placeholder = t(key);
+                });
+            }
+        }
+        
+        // Function to apply the theme based on localStorage
+        function applyTheme() {
+            // Guard against early execution
+            if (!document.documentElement) return;
+
+            // Apply dark mode
+            const savedMode = localStorage.getItem('darkMode');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedMode === 'true' || (savedMode === null && prefersDark)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+
+            // Apply color scheme
+            const savedScheme = localStorage.getItem('colorScheme') || 'blue';
+            const isDark = document.documentElement.classList.contains('dark');
+            const themePrefix = isDark ? 'theme-dark-' : 'theme-light-';
+            
+            // Remove all other theme classes
+            const themeClasses = ['blue', 'emerald', 'purple', 'rose', 'amber', 'teal'];
+            themeClasses.forEach(theme => {
+                document.documentElement.classList.remove(`theme-light-${theme}`);
+                document.documentElement.classList.remove(`theme-dark-${theme}`);
+            });
+
+            // Add the correct theme class
+            if (savedScheme !== 'blue') {
+                 document.documentElement.classList.add(themePrefix + savedScheme);
+            }
+        }
+        applyTheme();
+    </script>
+    <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
+         <head> so that, as with the former runtime build, they follow the page's
+         own stylesheets in the cascade. -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    {% set page_label = 'Group Management' %}
+    {% set page_label_key = 'nav.groupManagement' %}
+    {% include 'components/page-header.html' %}
+    <div id="app" v-cloak class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col min-h-screen">
+
+        <main class="flex-grow">
+            <div class="bg-[var(--bg-secondary)] p-4 sm:p-6 lg:p-8 rounded-xl shadow-lg border border-[var(--border-primary)]">
+                <h2 class="text-2xl font-semibold text-[var(--text-primary)] mb-6">Group Management</h2>
+                
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="mb-4 p-3 rounded-lg {% if category == 'success' %}bg-[var(--bg-success-light)] text-[var(--text-success-strong)]{% elif category == 'danger' %}bg-[var(--bg-danger-light)] text-[var(--text-danger-strong)]{% else %}bg-[var(--bg-info-light)] text-[var(--text-info-strong)]{% endif %}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <!-- Tabs -->
+            <!-- Main Content Area -->
+            <div class="p-6">
+                <!-- Groups Management -->
+                <div v-show="activeTab === 'groups'">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-[var(--text-secondary)]">Group Management</h3>
+                        <button v-if="!isTeamAdminOnly" @click="openCreateTeamModal" class="px-4 py-2 bg-[var(--bg-button)] text-[var(--text-button)] rounded-lg shadow hover:bg-[var(--bg-button-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)] focus:ring-offset-2 transition duration-150 ease-in-out">
+                            <i class="fas fa-plus mr-2"></i> Create Group
+                        </button>
+                    </div>
+
+                    <!-- Groups List -->
+                    <div class="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-primary)] overflow-hidden">
+                        <div v-if="groups.length > 0">
+                            <table class="min-w-full divide-y divide-[var(--border-primary)]">
+                                <thead class="bg-[var(--bg-tertiary)]">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Group Name</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Description</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Members</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Created</th>
+                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-[var(--bg-secondary)] divide-y divide-[var(--border-primary)]">
+                                    <tr v-for="group in groups" :key="group.id" class="hover:bg-[var(--bg-tertiary)]">
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm font-medium text-[var(--text-primary)]">${ group.name }</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="text-sm text-[var(--text-secondary)]">${ group.description || 'No description' }</div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="text-sm text-[var(--text-secondary)]">
+                                                <i class="fas fa-users mr-1"></i>
+                                                ${ group.member_count || 0 } members
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">
+                                            ${ parseInstant(group.created_at).toLocaleDateString() }
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                            <button @click="openManageTeamModal(group)" class="text-blue-500 hover:text-blue-700" title="Manage Members">
+                                                <i class="fas fa-users-cog"></i>
+                                            </button>
+                                            <button @click="openManageTeamTagsModal(group)" class="text-purple-500 hover:text-purple-700" title="Manage Group Tags">
+                                                <i class="fas fa-tags"></i>
+                                            </button>
+                                            <button v-if="foldersEnabled" @click="openManageTeamFoldersModal(group)" class="text-emerald-500 hover:text-emerald-700" title="Manage Group Folders">
+                                                <i class="fas fa-folder"></i>
+                                            </button>
+                                            <button @click="openEditTeamModal(group)" class="text-[var(--text-accent)] hover:text-[var(--text-accent-hover)]" title="Edit Group">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button v-if="!isTeamAdminOnly" @click="confirmDeleteTeam(group)" class="text-red-500 hover:text-red-700" title="Delete Group">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-else class="p-8 text-center">
+                            <i class="fas fa-users-slash text-4xl text-[var(--text-muted)] mb-3"></i>
+                            <p class="text-[var(--text-muted)]" v-text="isTeamAdminOnly ? 'You are not an admin of any groups yet' : 'No groups created yet'"></p>
+                            <button v-if="!isTeamAdminOnly" @click="openCreateTeamModal" class="mt-4 px-4 py-2 bg-[var(--bg-button)] text-[var(--text-button)] rounded-lg hover:bg-[var(--bg-button-hover)]">
+                                <i class="fas fa-plus mr-2"></i> Create Your First Group
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <footer class="text-center py-4 mt-8 text-xs text-[var(--text-light)] border-t border-[var(--border-primary)]">
+            Speakr &copy; {{ now.year }}
+        </footer>
+        <!-- Create/Edit Group Modal -->
+        <div v-if="showTeamModal" @click.self="closeTeamModal" class="modal-overlay">
+            <div class="modal-panel modal-panel--sm">
+                <div class="modal-header">
+                    <h3 class="modal-title">${ editingTeam ? 'Edit Group' : 'Create Group' }</h3>
+                    <button @click="closeTeamModal" class="modal-close" title="Close"><i class="fas fa-times"></i></button>
+                </div>
+                <form @submit.prevent="saveTeam" class="contents">
+                    <div class="modal-body">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-[var(--text-secondary)] mb-1">Group Name *</label>
+                                <input v-model="teamForm.name" type="text" required class="field w-full" placeholder="Enter group name">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-[var(--text-secondary)] mb-1">Description</label>
+                                <textarea v-model="teamForm.description" rows="3" class="field w-full" placeholder="Optional description"></textarea>
+                            </div>
+                            <div v-if="teamError" class="p-3 bg-[var(--bg-danger-light)] text-[var(--text-danger-strong)] rounded-md text-sm">
+                                ${ teamError }
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" @click="closeTeamModal" class="btn btn--ghost">Cancel</button>
+                        <button type="submit" class="btn btn--primary">${ editingTeam ? 'Update Group' : 'Create Group' }</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Manage Group Members Modal -->
+        <div v-if="showManageTeamModal" @click.self="closeManageTeamModal" class="modal-overlay">
+            <div class="modal-panel modal-panel--lg">
+                <div class="modal-header">
+                    <h3 class="modal-title">Manage Group: ${ currentTeam?.name }</h3>
+                    <button @click="closeManageTeamModal" class="modal-close" title="Close"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Add Member Section -->
+                    <div class="mb-6 p-4 bg-[var(--bg-tertiary)] rounded-lg">
+                        <h4 class="text-sm font-medium text-[var(--text-secondary)] mb-3">Add Member</h4>
+                        <div class="flex space-x-2">
+                            <div class="flex-1">
+                                <select v-model="newMemberUserId" class="field w-full">
+                                    <option value="">Select a user...</option>
+                                    <option v-for="user in availableUsers" :key="user.id" :value="user.id">
+                                        ${ user.username } (${ user.email })
+                                    </option>
+                                </select>
+                            </div>
+                            <div>
+                                <select v-model="newMemberRole" class="field">
+                                    <option value="member">Member</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <button @click="addTeamMember" :disabled="!newMemberUserId" class="btn btn--primary">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Current Members -->
+                    <div>
+                        <h4 class="text-sm font-medium text-[var(--text-secondary)] mb-3">Current Members (${ teamMembers.length })</h4>
+                        <div v-if="teamMembers.length > 0" class="space-y-2">
+                            <div v-for="member in teamMembers" :key="member.user_id"
+                                 class="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-md">
+                                <div class="flex items-center space-x-3">
+                                    <i class="fas fa-user text-[var(--text-muted)]"></i>
+                                    <div>
+                                        <div class="text-sm font-medium text-[var(--text-primary)]">${ member.username }</div>
+                                        <div class="text-xs text-[var(--text-muted)]">${ member.email }</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <select v-model="member.role" @change="updateMemberRole(member)" class="field field--sm">
+                                        <option value="member">Member</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                    <button @click="removeTeamMember(member)" class="btn btn--icon btn--danger btn--sm" title="Remove from group">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="text-center py-4 text-[var(--text-muted)]">
+                            No members yet
+                        </div>
+                    </div>
+
+                    <div v-if="teamMemberError" class="mt-4 p-3 bg-[var(--bg-danger-light)] text-[var(--text-danger-strong)] rounded-md text-sm">
+                        ${ teamMemberError }
+                    </div>
+                </div>
+
+                <div class="modal-footer modal-footer--between">
+                    <button @click="syncTeamShares" class="btn btn--primary">
+                        <i class="fas fa-sync-alt"></i> Sync Group Shares
+                    </button>
+                    <button @click="closeManageTeamModal" class="btn btn--ghost">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Group Shares Confirmation Modal -->
+        <div v-if="showSyncSharesModal" @click.self="showSyncSharesModal = false" class="modal-overlay">
+            <div class="modal-panel modal-panel--sm">
+                <div class="modal-header">
+                    <h3 class="modal-title">Sync Group Shares</h3>
+                    <button @click="showSyncSharesModal = false" class="modal-close" title="Close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-4 text-[var(--text-secondary)]">
+                        This will create shares for all recordings with group tags that have auto-sharing enabled.
+                    </p>
+                    <p class="text-[var(--text-muted)] text-sm">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Only missing shares will be created - existing shares won't be duplicated.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button @click="showSyncSharesModal = false" class="btn btn--ghost">Cancel</button>
+                    <button @click="confirmSyncShares" class="btn btn--primary"><i class="fas fa-sync-alt"></i> Sync Now</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Results Modal -->
+        <div v-if="showSyncResultsModal" @click.self="showSyncResultsModal = false" class="modal-overlay">
+            <div class="modal-panel modal-panel--sm">
+                <div class="modal-header">
+                    <i class="fas fa-check-circle text-green-500"></i>
+                    <h3 class="modal-title">Sync Complete</h3>
+                    <button @click="showSyncResultsModal = false" class="modal-close" title="Close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-[var(--text-secondary)]">
+                            <span>Shares created:</span>
+                            <span class="font-semibold">${ syncResults.shares_created }</span>
+                        </div>
+                        <div class="flex justify-between text-[var(--text-secondary)]">
+                            <span>Recordings processed:</span>
+                            <span class="font-semibold">${ syncResults.recordings_processed }</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button @click="showSyncResultsModal = false" class="btn btn--primary">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Group Confirmation Modal -->
+        <div v-if="showDeleteTeamModal" @click.self="showDeleteTeamModal = false" class="modal-overlay">
+            <div class="modal-panel modal-panel--sm modal-panel--danger">
+                <div class="modal-header">
+                    <h3 class="modal-title">Delete Group</h3>
+                    <button @click="showDeleteTeamModal = false" class="modal-close" title="Close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-[var(--text-secondary)]">Are you sure you want to delete the group <span class="font-semibold">${ teamToDelete?.name }</span>? This will remove all members from the group. This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button @click="showDeleteTeamModal = false" class="btn btn--ghost">Cancel</button>
+                    <button @click="deleteTeam" class="btn btn--danger">Delete Group</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manage Group Tags Modal -->
+        <div v-if="showManageTeamTagsModal" @click.self="closeManageTeamTagsModal" class="modal-overlay">
+            <div class="modal-panel modal-panel--lg">
+                <div class="modal-header">
+                    <h3 class="modal-title">Manage Tags for ${ currentTeam?.name }</h3>
+                    <button @click="closeManageTeamTagsModal" class="modal-close" title="Close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+
+                <!-- Create/Edit Tag Form -->
+                <div class="bg-[var(--bg-tertiary)] p-4 rounded-lg mb-4 border border-[var(--border-primary)]">
+                    <div class="flex justify-between items-center mb-3">
+                        <h4 class="text-sm font-medium text-[var(--text-secondary)]">
+                            ${ editingTeamTagId ? 'Edit Group Tag' : 'Create New Group Tag' }
+                        </h4>
+                        <button v-if="editingTeamTagId" @click="cancelEditTeamTag" type="button" class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                            <i class="fas fa-times mr-1"></i> Cancel
+                        </button>
+                    </div>
+                    <form @submit.prevent="saveTeamTag" class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tag Name *</label>
+                                <input v-model="newTeamTag.name" type="text" required maxlength="50"
+                                       class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                       placeholder="e.g., Project Alpha">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Color</label>
+                                <input v-model="newTeamTag.color" type="color"
+                                       class="w-full h-10 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] cursor-pointer">
+                            </div>
+                        </div>
+
+                        <!-- Custom Prompt -->
+                        <div>
+                            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                                Custom Summarization Prompt
+                                <span class="text-[var(--text-muted)] font-normal">- Optional AI instructions</span>
+                            </label>
+                            <textarea v-model="newTeamTag.custom_prompt" rows="3"
+                                   class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                   placeholder="Enter custom instructions for AI summarization (e.g., 'Focus on action items and deadlines')"></textarea>
+                            <p class="text-xs text-[var(--text-muted)] mt-1">
+                                Recordings with this tag will use this prompt for AI summaries and chat.
+                            </p>
+                        </div>
+                        <!-- Title Prompt (#400) -->
+                        <div>
+                            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1" v-text="t('editTagModal.titlePrompt')"></label>
+                            <textarea v-model="newTeamTag.title_prompt" rows="2"
+                                   class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                   :placeholder="t('editTagModal.titlePromptPlaceholder')"></textarea>
+                            <p class="text-xs text-[var(--text-muted)] mt-1" v-text="t('editTagModal.titlePromptHelp')"></p>
+                        </div>
+
+                        <!-- Transcription Settings -->
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Default Language</label>
+                                <select v-model="newTeamTag.default_language"
+                                        class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]">
+                                    <option value="">Auto-detect</option>
+                                    <option value="en">English</option>
+                                    <option value="es">Spanish</option>
+                                    <option value="fr">French</option>
+                                    <option value="de">German</option>
+                                    <option value="zh">Chinese</option>
+                                    <option value="ja">Japanese</option>
+                                    <option value="pt">Portuguese</option>
+                                    <option value="it">Italian</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Min Speakers</label>
+                                <input v-model.number="newTeamTag.default_min_speakers" type="number" min="1" max="10"
+                                       class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                       placeholder="1">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Max Speakers</label>
+                                <input v-model.number="newTeamTag.default_max_speakers" type="number" min="1" max="10"
+                                       class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                       placeholder="5">
+                            </div>
+                        </div>
+
+                        <!-- Retention and Protection -->
+                        <div>
+                            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                                Retention Period (days)
+                                <span class="text-[var(--text-muted)] font-normal">- Optional override for auto-deletion</span>
+                            </label>
+                            <input v-model.number="newTeamTag.retention_days" type="number" min="0" step="1"
+                                   class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                   placeholder="Leave empty to use global retention">
+                            <p class="text-xs text-[var(--text-muted)] mt-1">
+                                Recordings with this tag will be deleted after this many days. Leave empty to use global retention (${ globalRetentionDays } days).
+                            </p>
+                        </div>
+                        <div class="flex items-center">
+                            <input v-model="newTeamTag.protect_from_deletion" type="checkbox" id="protectFromDeletion"
+                                   class="mr-2 h-4 w-4 text-[var(--text-accent)] border-[var(--border-secondary)] rounded focus:ring-[var(--border-focus)]">
+                            <label for="protectFromDeletion" class="text-xs text-[var(--text-secondary)]">
+                                <i class="fas fa-shield-alt mr-1"></i> Protect recordings with this tag from auto-deletion
+                            </label>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center">
+                                <input v-model="newTeamTag.auto_share_on_apply" type="checkbox" id="autoShareOnApply"
+                                       class="mr-2 h-4 w-4 text-[var(--text-accent)] border-[var(--border-secondary)] rounded focus:ring-[var(--border-focus)]">
+                                <label for="autoShareOnApply" class="text-xs text-[var(--text-secondary)]">
+                                    <i class="fas fa-user-friends mr-1"></i> Auto-share recordings with all group members when this tag is applied
+                                </label>
+                            </div>
+                            <div class="flex items-center">
+                                <input v-model="newTeamTag.share_with_group_lead" type="checkbox" id="shareWithGroupLead"
+                                       class="mr-2 h-4 w-4 text-[var(--text-accent)] border-[var(--border-secondary)] rounded focus:ring-[var(--border-focus)]">
+                                <label for="shareWithGroupLead" class="text-xs text-[var(--text-secondary)]">
+                                    <i class="fas fa-user-tie mr-1"></i> Share recordings with group admins when this tag is applied
+                                </label>
+                            </div>
+                            <p class="text-xs text-[var(--text-muted)] ml-6">
+                                Note: If both are enabled, all group members will have access. If only "group admins" is enabled, only group leads will have access.
+                            </p>
+                        </div>
+                        <div v-if="teamTagError" class="text-[var(--text-danger)] text-xs">${ teamTagError }</div>
+                        <button type="submit" class="px-4 py-2 bg-[var(--bg-button)] text-[var(--text-button)] rounded-md hover:bg-[var(--bg-button-hover)] text-sm">
+                            <i :class="editingTeamTagId ? 'fas fa-save' : 'fas fa-plus'" class="mr-1"></i>
+                            ${ editingTeamTagId ? 'Update Tag' : 'Create Tag' }
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Existing Group Tags -->
+                <div>
+                    <h4 class="text-sm font-medium text-[var(--text-secondary)] mb-3">Group Tags</h4>
+                    <div v-if="teamTags.length > 0" class="space-y-3">
+                        <div v-for="tag in teamTags" :key="tag.id"
+                             class="bg-[var(--bg-tertiary)] p-4 rounded-lg border border-[var(--border-primary)]">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex items-center space-x-3 flex-1">
+                                    <span class="inline-block w-4 h-4 rounded flex-shrink-0" :style="{ backgroundColor: tag.color }"></span>
+                                    <div class="flex-1">
+                                        <div class="text-sm font-medium text-[var(--text-primary)]">${ tag.name }</div>
+                                        <div class="text-xs text-[var(--text-muted)] mt-1 space-x-3">
+                                            <span v-if="tag.retention_days">
+                                                <i class="fas fa-clock mr-1"></i> ${ tag.retention_days } day retention
+                                            </span>
+                                            <span v-else>
+                                                <i class="fas fa-globe mr-1"></i> Global retention
+                                            </span>
+                                            <span v-if="tag.protect_from_deletion" class="text-green-500">
+                                                <i class="fas fa-shield-alt mr-1"></i> Protected
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2 flex-shrink-0">
+                                    <button @click="editTeamTag(tag)" class="text-blue-500 hover:text-blue-700 px-2 py-1" title="Edit Tag">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button @click="deleteTeamTag(tag)" class="text-red-500 hover:text-red-700 px-2 py-1" title="Delete Tag">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Additional details if configured -->
+                            <div v-if="tag.custom_prompt || tag.default_language || tag.default_min_speakers || tag.default_max_speakers"
+                                 class="mt-2 pt-2 border-t border-[var(--border-secondary)] space-y-1">
+                                <div v-if="tag.custom_prompt" class="text-xs text-[var(--text-muted)]">
+                                    <i class="fas fa-comment-dots mr-1"></i> Custom prompt configured
+                                </div>
+                                <div v-if="tag.default_language" class="text-xs text-[var(--text-muted)]">
+                                    <i class="fas fa-language mr-1"></i> Language: ${ tag.default_language.toUpperCase() }
+                                </div>
+                                <div v-if="tag.default_min_speakers || tag.default_max_speakers" class="text-xs text-[var(--text-muted)]">
+                                    <i class="fas fa-users mr-1"></i> Speakers:
+                                    <span v-if="tag.default_min_speakers">${ tag.default_min_speakers }-</span><span v-if="tag.default_max_speakers">${ tag.default_max_speakers }</span><span v-else>auto</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-8 text-[var(--text-muted)]">
+                        <i class="fas fa-tags text-3xl mb-2"></i>
+                        <p class="text-sm">No group tags created yet</p>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manage Group Folders Modal -->
+        <div v-if="showManageTeamFoldersModal" @click.self="closeManageTeamFoldersModal" class="modal-overlay">
+            <div class="modal-panel modal-panel--lg">
+                <div class="modal-header">
+                    <i class="fas fa-folder text-emerald-500"></i>
+                    <h3 class="modal-title">Manage Folders for ${ currentTeam?.name }</h3>
+                    <button @click="closeManageTeamFoldersModal" class="modal-close" title="Close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+
+                <!-- Create/Edit Folder Form -->
+                <div class="bg-[var(--bg-tertiary)] p-4 rounded-lg mb-4 border border-[var(--border-primary)]">
+                    <div class="flex justify-between items-center mb-3">
+                        <h4 class="text-sm font-medium text-[var(--text-secondary)]">
+                            ${ editingTeamFolderId ? 'Edit Group Folder' : 'Create New Group Folder' }
+                        </h4>
+                        <button v-if="editingTeamFolderId" @click="cancelEditTeamFolder" type="button" class="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                            <i class="fas fa-times mr-1"></i> Cancel
+                        </button>
+                    </div>
+                    <form @submit.prevent="saveTeamFolder" class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Folder Name *</label>
+                                <input v-model="newTeamFolder.name" type="text" required maxlength="50"
+                                       class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                       placeholder="e.g., Client Calls">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Color</label>
+                                <input v-model="newTeamFolder.color" type="color"
+                                       class="w-full h-10 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] cursor-pointer">
+                            </div>
+                        </div>
+
+                        <!-- Custom Prompt -->
+                        <div>
+                            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                                Custom Summarization Prompt
+                                <span class="text-[var(--text-muted)] font-normal">- Optional AI instructions</span>
+                            </label>
+                            <textarea v-model="newTeamFolder.custom_prompt" rows="3"
+                                   class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                   placeholder="Enter custom instructions for AI summarization"></textarea>
+                            <p class="text-xs text-[var(--text-muted)] mt-1">
+                                Recordings in this folder will use this prompt (unless overridden by a tag).
+                            </p>
+                        </div>
+                        <!-- Title Prompt (#400) -->
+                        <div>
+                            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1" v-text="t('folderManagement.titlePrompt')"></label>
+                            <textarea v-model="newTeamFolder.title_prompt" rows="2"
+                                   class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                   :placeholder="t('folderManagement.titlePromptPlaceholder')"></textarea>
+                            <p class="text-xs text-[var(--text-muted)] mt-1" v-text="t('folderManagement.titlePromptHelp')"></p>
+                        </div>
+
+                        <!-- Transcription Settings -->
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Default Language</label>
+                                <select v-model="newTeamFolder.default_language"
+                                        class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]">
+                                    <option value="">Auto-detect</option>
+                                    <option value="en">English</option>
+                                    <option value="es">Spanish</option>
+                                    <option value="fr">French</option>
+                                    <option value="de">German</option>
+                                    <option value="zh">Chinese</option>
+                                    <option value="ja">Japanese</option>
+                                    <option value="pt">Portuguese</option>
+                                    <option value="it">Italian</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Min Speakers</label>
+                                <input v-model.number="newTeamFolder.default_min_speakers" type="number" min="1" max="10"
+                                       class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                       placeholder="1">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Max Speakers</label>
+                                <input v-model.number="newTeamFolder.default_max_speakers" type="number" min="1" max="10"
+                                       class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                       placeholder="5">
+                            </div>
+                        </div>
+
+                        <!-- Retention and Protection -->
+                        <div>
+                            <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                                Retention Period (days)
+                                <span class="text-[var(--text-muted)] font-normal">- Optional override for auto-deletion</span>
+                            </label>
+                            <input v-model.number="newTeamFolder.retention_days" type="number" min="0" step="1"
+                                   class="w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md bg-[var(--bg-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                                   placeholder="Leave empty to use global retention">
+                            <p class="text-xs text-[var(--text-muted)] mt-1">
+                                Recordings in this folder will be deleted after this many days. Leave empty to use global retention (${ globalRetentionDays } days).
+                            </p>
+                        </div>
+                        <div class="flex items-center">
+                            <input v-model="newTeamFolder.protect_from_deletion" type="checkbox" id="folderProtectFromDeletion"
+                                   class="mr-2 h-4 w-4 text-[var(--text-accent)] border-[var(--border-secondary)] rounded focus:ring-[var(--border-focus)]">
+                            <label for="folderProtectFromDeletion" class="text-xs text-[var(--text-secondary)]">
+                                <i class="fas fa-shield-alt mr-1"></i> Protect recordings in this folder from auto-deletion
+                            </label>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center">
+                                <input v-model="newTeamFolder.auto_share_on_apply" type="checkbox" id="folderAutoShareOnApply"
+                                       class="mr-2 h-4 w-4 text-[var(--text-accent)] border-[var(--border-secondary)] rounded focus:ring-[var(--border-focus)]">
+                                <label for="folderAutoShareOnApply" class="text-xs text-[var(--text-secondary)]">
+                                    <i class="fas fa-user-friends mr-1"></i> Auto-share recordings with all group members when added to this folder
+                                </label>
+                            </div>
+                            <div class="flex items-center">
+                                <input v-model="newTeamFolder.share_with_group_lead" type="checkbox" id="folderShareWithGroupLead"
+                                       class="mr-2 h-4 w-4 text-[var(--text-accent)] border-[var(--border-secondary)] rounded focus:ring-[var(--border-focus)]">
+                                <label for="folderShareWithGroupLead" class="text-xs text-[var(--text-secondary)]">
+                                    <i class="fas fa-user-tie mr-1"></i> Share recordings with group admins when added to this folder
+                                </label>
+                            </div>
+                            <p class="text-xs text-[var(--text-muted)] ml-6">
+                                Note: If both are enabled, all group members will have access. If only "group admins" is enabled, only group leads will have access.
+                            </p>
+                        </div>
+                        <div v-if="teamFolderError" class="text-[var(--text-danger)] text-xs">${ teamFolderError }</div>
+                        <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm">
+                            <i :class="editingTeamFolderId ? 'fas fa-save' : 'fas fa-plus'" class="mr-1"></i>
+                            ${ editingTeamFolderId ? 'Update Folder' : 'Create Folder' }
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Existing Group Folders -->
+                <div>
+                    <h4 class="text-sm font-medium text-[var(--text-secondary)] mb-3">Group Folders</h4>
+                    <div v-if="teamFolders.length > 0" class="space-y-3">
+                        <div v-for="folder in teamFolders" :key="folder.id"
+                             class="bg-[var(--bg-tertiary)] p-4 rounded-lg border border-[var(--border-primary)]">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex items-center space-x-3 flex-1">
+                                    <span class="inline-block w-4 h-4 rounded flex-shrink-0" :style="{ backgroundColor: folder.color || '#10B981' }"></span>
+                                    <div class="flex-1">
+                                        <div class="text-sm font-medium text-[var(--text-primary)]">${ folder.name }</div>
+                                        <div class="text-xs text-[var(--text-muted)] mt-1 space-x-3">
+                                            <span v-if="folder.retention_days">
+                                                <i class="fas fa-clock mr-1"></i> ${ folder.retention_days } day retention
+                                            </span>
+                                            <span v-else>
+                                                <i class="fas fa-globe mr-1"></i> Global retention
+                                            </span>
+                                            <span v-if="folder.protect_from_deletion" class="text-green-500">
+                                                <i class="fas fa-shield-alt mr-1"></i> Protected
+                                            </span>
+                                            <span>
+                                                <i class="fas fa-file-audio mr-1"></i> ${ folder.recording_count || 0 } recordings
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2 flex-shrink-0">
+                                    <button @click="editTeamFolder(folder)" class="text-blue-500 hover:text-blue-700 px-2 py-1" title="Edit Folder">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button @click="deleteTeamFolder(folder)" class="text-red-500 hover:text-red-700 px-2 py-1" title="Delete Folder">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Additional details if configured -->
+                            <div v-if="folder.custom_prompt || folder.default_language || folder.default_min_speakers || folder.default_max_speakers"
+                                 class="mt-2 pt-2 border-t border-[var(--border-secondary)] space-y-1">
+                                <div v-if="folder.custom_prompt" class="text-xs text-[var(--text-muted)]">
+                                    <i class="fas fa-comment-dots mr-1"></i> Custom prompt configured
+                                </div>
+                                <div v-if="folder.default_language" class="text-xs text-[var(--text-muted)]">
+                                    <i class="fas fa-language mr-1"></i> Language: ${ folder.default_language.toUpperCase() }
+                                </div>
+                                <div v-if="folder.default_min_speakers || folder.default_max_speakers" class="text-xs text-[var(--text-muted)]">
+                                    <i class="fas fa-users mr-1"></i> Speakers:
+                                    <span v-if="folder.default_min_speakers">${ folder.default_min_speakers }-</span><span v-if="folder.default_max_speakers">${ folder.default_max_speakers }</span><span v-else>auto</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-8 text-[var(--text-muted)]">
+                        <i class="fas fa-folder text-3xl mb-2"></i>
+                        <p class="text-sm">No group folders created yet</p>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue
+        
+        // Initialize i18n before Vue app creation
+        initializeI18n().then(() => {
+            // Get the i18n instance to properly bind the t function
+            const i18nInstance = window.i18n;
+            
+            createApp({
+            setup() {
+                // Backend INSTANT timestamps are naive UTC; append 'Z' so they're
+                // read as UTC and rendered in the viewer's local timezone.
+                const parseInstant = (s) => {
+                    if (s == null) return new Date(NaN);
+                    if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) && !/(?:Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+                        s = s.replace(' ', 'T') + 'Z';
+                    }
+                    return new Date(s);
+                };
+                // State - groups only
+                const isTeamAdminOnly = ref(true); // This page is only for group admins
+                const activeTab = ref('groups'); // Single tab page
+                const groups = ref([]);
+                const globalRetentionDays = ref({{ global_retention_days }});
+                const isDarkMode = ref(document.documentElement.classList.contains('dark'));
+                const isUserMenuOpen = ref(false);
+
+                // Group modals state
+                const showTeamModal = ref(false);
+                const showManageTeamModal = ref(false);
+                const showDeleteTeamModal = ref(false);
+                const showSyncSharesModal = ref(false);
+                const showSyncResultsModal = ref(false);
+                const showManageTeamTagsModal = ref(false);
+                const editingTeam = ref(null);
+                const teamToDelete = ref(null);
+                const currentTeam = ref(null);
+                const teamForm = ref({ name: '', description: '' });
+                const teamError = ref('');
+                const teamMembers = ref([]);
+                const teamMemberError = ref('');
+                const newMemberUserId = ref('');
+                const newMemberRole = ref('member');
+                const availableUsers = ref([]);
+                const teamTags = ref([]);
+                const editingTeamTagId = ref(null);
+                const newTeamTag = ref({
+                    name: '',
+                    color: '#3B82F6',
+                    custom_prompt: '',
+                    title_prompt: '',
+                    default_language: '',
+                    default_min_speakers: null,
+                    default_max_speakers: null,
+                    retention_days: null,
+                    protect_from_deletion: false,
+                    auto_share_on_apply: true,
+                    share_with_group_lead: true
+                });
+                const teamTagError = ref('');
+
+                // Folders state
+                const foldersEnabled = ref(false);
+                const showManageTeamFoldersModal = ref(false);
+                const teamFolders = ref([]);
+                const editingTeamFolderId = ref(null);
+                const newTeamFolder = ref({
+                    name: '',
+                    color: '#10B981',
+                    custom_prompt: '',
+                    title_prompt: '',
+                    default_language: '',
+                    default_min_speakers: null,
+                    default_max_speakers: null,
+                    retention_days: null,
+                    protect_from_deletion: false,
+                    auto_share_on_apply: true,
+                    share_with_group_lead: true
+                });
+                const teamFolderError = ref('');
+                const syncResults = ref({ shares_created: 0, recordings_processed: 0 });
+                const users = ref([]);
+                
+                const loadGroups = async () => {
+                    try {
+                        const response = await fetch('/api/admin/groups');
+                        if (!response.ok) throw new Error('Failed to load groups');
+                        const data = await response.json();
+                        groups.value = data.groups || [];
+                    } catch (error) {
+                        console.error('Error loading teams:', error);
+                    }
+                };
+
+                const openCreateTeamModal = () => {
+                    editingTeam.value = null;
+                    teamForm.value = { name: '', description: '' };
+                    teamError.value = '';
+                    showTeamModal.value = true;
+                };
+
+                const openEditTeamModal = (group) => {
+                    editingTeam.value = group;
+                    teamForm.value = { name: group.name, description: group.description || '' };
+                    teamError.value = '';
+                    showTeamModal.value = true;
+                };
+
+                const closeTeamModal = () => {
+                    showTeamModal.value = false;
+                    editingTeam.value = null;
+                    teamForm.value = { name: '', description: '' };
+                    teamError.value = '';
+                };
+
+                const saveTeam = async () => {
+                    teamError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const url = editingTeam.value
+                            ? `/api/admin/groups/${editingTeam.value.id}`
+                            : '/api/admin/groups';
+                        const method = editingTeam.value ? 'PUT' : 'POST';
+
+                        const response = await fetch(url, {
+                            method,
+                            headers,
+                            body: JSON.stringify(teamForm.value)
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to save group');
+                        }
+
+                        closeTeamModal();
+                        await loadGroups();
+                    } catch (error) {
+                        teamError.value = error.message;
+                    }
+                };
+
+                const confirmDeleteTeam = (group) => {
+                    teamToDelete.value = group;
+                    showDeleteTeamModal.value = true;
+                };
+
+                const deleteTeam = async () => {
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = {};
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const response = await fetch(`/api/admin/groups/${teamToDelete.value.id}`, {
+                            method: 'DELETE',
+                            headers
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to delete group');
+                        }
+
+                        showDeleteTeamModal.value = false;
+                        teamToDelete.value = null;
+                        await loadGroups();
+                    } catch (error) {
+                        alert(error.message);
+                    }
+                };
+
+                const openManageTeamModal = async (group) => {
+                    currentTeam.value = group;
+                    newMemberUserId.value = '';
+                    newMemberRole.value = 'member';
+                    teamMemberError.value = '';
+                    showManageTeamModal.value = true;
+                    await loadTeamMembers(group.id);
+                };
+
+                const closeManageTeamModal = () => {
+                    showManageTeamModal.value = false;
+                    currentTeam.value = null;
+                    teamMembers.value = [];
+                    newMemberUserId.value = '';
+                    newMemberRole.value = 'member';
+                    teamMemberError.value = '';
+                };
+
+                const loadTeamMembers = async (groupId) => {
+                    try {
+                        const response = await fetch(`/api/admin/groups/${groupId}`);
+                        if (!response.ok) throw new Error('Failed to load group members');
+                        const data = await response.json();
+                        teamMembers.value = data.members || [];
+                    } catch (error) {
+                        console.error('Error loading group members:', error);
+                        teamMemberError.value = error.message;
+                    }
+                };
+
+                const addTeamMember = async () => {
+                    if (!newMemberUserId.value) return;
+
+                    teamMemberError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const response = await fetch(`/api/admin/groups/${currentTeam.value.id}/members`, {
+                            method: 'POST',
+                            headers,
+                            body: JSON.stringify({
+                                user_id: parseInt(newMemberUserId.value),
+                                role: newMemberRole.value
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to add member');
+                        }
+
+                        newMemberUserId.value = '';
+                        newMemberRole.value = 'member';
+                        await loadTeamMembers(currentTeam.value.id);
+                        await loadGroups(); // Refresh to update member count
+                    } catch (error) {
+                        teamMemberError.value = error.message;
+                    }
+                };
+
+                const updateMemberRole = async (member) => {
+                    teamMemberError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const response = await fetch(`/api/admin/groups/${currentTeam.value.id}/members/${member.user_id}`, {
+                            method: 'PUT',
+                            headers,
+                            body: JSON.stringify({ role: member.role })
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to update role');
+                        }
+                    } catch (error) {
+                        teamMemberError.value = error.message;
+                        await loadTeamMembers(currentTeam.value.id); // Reload to revert on error
+                    }
+                };
+
+                const removeTeamMember = async (member) => {
+                    if (!confirm(`Remove ${member.username} from the group?`)) return;
+
+                    teamMemberError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = {};
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const response = await fetch(`/api/admin/groups/${currentTeam.value.id}/members/${member.user_id}`, {
+                            method: 'DELETE',
+                            headers
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to remove member');
+                        }
+
+                        await loadTeamMembers(currentTeam.value.id);
+                        await loadGroups(); // Refresh to update member count
+                    } catch (error) {
+                        teamMemberError.value = error.message;
+                    }
+                };
+
+                const syncTeamShares = () => {
+                    if (!currentTeam.value) return;
+                    showSyncSharesModal.value = true;
+                };
+
+                const confirmSyncShares = async () => {
+                    showSyncSharesModal.value = false;
+                    teamMemberError.value = '';
+
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const response = await fetch(`/api/groups/${currentTeam.value.id}/sync-shares`, {
+                            method: 'POST',
+                            headers
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to sync shares');
+                        }
+
+                        const result = await response.json();
+                        syncResults.value = {
+                            shares_created: result.shares_created,
+                            recordings_processed: result.recordings_processed
+                        };
+                        showSyncResultsModal.value = true;
+                    } catch (error) {
+                        teamMemberError.value = error.message;
+                    }
+                };
+
+                // Group Tags Management
+                const openManageTeamTagsModal = async (group) => {
+                    currentTeam.value = group;
+                    teamTagError.value = '';
+                    await loadTeamTags(group.id);
+                    showManageTeamTagsModal.value = true;
+                };
+
+                const closeManageTeamTagsModal = () => {
+                    showManageTeamTagsModal.value = false;
+                    currentTeam.value = null;
+                    teamTags.value = [];
+                    editingTeamTagId.value = null;
+                    newTeamTag.value = {
+                        name: '',
+                        color: '#3B82F6',
+                        custom_prompt: '',
+                        title_prompt: '',
+                        default_language: '',
+                        default_min_speakers: null,
+                        default_max_speakers: null,
+                        retention_days: null,
+                        protect_from_deletion: false,
+                        auto_share_on_apply: true,
+                        share_with_group_lead: true
+                    };
+                    teamTagError.value = '';
+                };
+
+                const loadTeamTags = async (groupId) => {
+                    try {
+                        const response = await fetch(`/api/groups/${groupId}/tags`);
+                        if (!response.ok) throw new Error('Failed to load group tags');
+                        const data = await response.json();
+                        teamTags.value = data.tags || [];
+                    } catch (error) {
+                        teamTagError.value = error.message;
+                    }
+                };
+
+                const editTeamTag = (tag) => {
+                    editingTeamTagId.value = tag.id;
+                    newTeamTag.value = {
+                        name: tag.name,
+                        color: tag.color,
+                        custom_prompt: tag.custom_prompt || '',
+                        title_prompt: tag.title_prompt || '',
+                        default_language: tag.default_language || '',
+                        default_min_speakers: tag.default_min_speakers,
+                        default_max_speakers: tag.default_max_speakers,
+                        retention_days: tag.retention_days,
+                        protect_from_deletion: tag.protect_from_deletion || false,
+                        auto_share_on_apply: tag.auto_share_on_apply !== undefined ? tag.auto_share_on_apply : true,
+                        share_with_group_lead: tag.share_with_group_lead !== undefined ? tag.share_with_group_lead : true
+                    };
+                    // Scroll to top of modal
+                    document.querySelector('.max-h-\\[90vh\\]')?.scrollTo({ top: 0, behavior: 'smooth' });
+                };
+
+                const cancelEditTeamTag = () => {
+                    editingTeamTagId.value = null;
+                    newTeamTag.value = {
+                        name: '',
+                        color: '#3B82F6',
+                        custom_prompt: '',
+                        title_prompt: '',
+                        default_language: '',
+                        default_min_speakers: null,
+                        default_max_speakers: null,
+                        retention_days: null,
+                        protect_from_deletion: false,
+                        auto_share_on_apply: true,
+                        share_with_group_lead: true
+                    };
+                    teamTagError.value = '';
+                };
+
+                const saveTeamTag = async () => {
+                    teamTagError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const payload = {
+                            name: newTeamTag.value.name,
+                            color: newTeamTag.value.color,
+                            protect_from_deletion: newTeamTag.value.protect_from_deletion,
+                            auto_share_on_apply: newTeamTag.value.auto_share_on_apply,
+                            share_with_group_lead: newTeamTag.value.share_with_group_lead
+                        };
+
+                        // Add custom prompt if provided
+                        if (newTeamTag.value.custom_prompt && newTeamTag.value.custom_prompt.trim()) {
+                            payload.custom_prompt = newTeamTag.value.custom_prompt.trim();
+                        }
+                        // Title instructions are always sent so clearing the field clears them (#400)
+                        payload.title_prompt = (newTeamTag.value.title_prompt || '').trim() || null;
+
+                        // Add language if selected
+                        if (newTeamTag.value.default_language) {
+                            payload.default_language = newTeamTag.value.default_language;
+                        }
+
+                        // Add speaker settings if provided
+                        if (newTeamTag.value.default_min_speakers) {
+                            payload.default_min_speakers = newTeamTag.value.default_min_speakers;
+                        }
+                        if (newTeamTag.value.default_max_speakers) {
+                            payload.default_max_speakers = newTeamTag.value.default_max_speakers;
+                        }
+
+                        // Only include retention_days if it's set and > 0
+                        if (newTeamTag.value.retention_days && newTeamTag.value.retention_days > 0) {
+                            payload.retention_days = newTeamTag.value.retention_days;
+                        }
+
+                        let response;
+                        if (editingTeamTagId.value) {
+                            // Update existing tag
+                            response = await fetch(`/api/tags/${editingTeamTagId.value}`, {
+                                method: 'PUT',
+                                headers,
+                                body: JSON.stringify(payload)
+                            });
+                        } else {
+                            // Create new tag
+                            response = await fetch(`/api/groups/${currentTeam.value.id}/tags`, {
+                                method: 'POST',
+                                headers,
+                                body: JSON.stringify(payload)
+                            });
+                        }
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || (editingTeamTagId.value ? 'Failed to update tag' : 'Failed to create tag'));
+                        }
+
+                        // Reset form and reload
+                        editingTeamTagId.value = null;
+                        newTeamTag.value = {
+                            name: '',
+                            color: '#3B82F6',
+                            custom_prompt: '',
+                            title_prompt: '',
+                            default_language: '',
+                            default_min_speakers: null,
+                            default_max_speakers: null,
+                            retention_days: null,
+                            protect_from_deletion: false,
+                            auto_share_on_apply: true,
+                            share_with_group_lead: true
+                        };
+                        await loadTeamTags(currentTeam.value.id);
+                    } catch (error) {
+                        teamTagError.value = error.message;
+                    }
+                };
+
+                const deleteTeamTag = async (tag) => {
+                    if (!confirm(`Delete the tag "${tag.name}"? This will remove the tag from all recordings.`)) return;
+
+                    teamTagError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = {};
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const response = await fetch(`/api/tags/${tag.id}`, {
+                            method: 'DELETE',
+                            headers
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to delete tag');
+                        }
+
+                        await loadTeamTags(currentTeam.value.id);
+                    } catch (error) {
+                        teamTagError.value = error.message;
+                    }
+                };
+
+                // Group Folders Management
+                const openManageTeamFoldersModal = async (group) => {
+                    currentTeam.value = group;
+                    teamFolderError.value = '';
+                    await loadTeamFolders(group.id);
+                    showManageTeamFoldersModal.value = true;
+                };
+
+                const closeManageTeamFoldersModal = () => {
+                    showManageTeamFoldersModal.value = false;
+                    currentTeam.value = null;
+                    teamFolders.value = [];
+                    editingTeamFolderId.value = null;
+                    newTeamFolder.value = {
+                        name: '',
+                        color: '#10B981',
+                        custom_prompt: '',
+                        title_prompt: '',
+                        default_language: '',
+                        default_min_speakers: null,
+                        default_max_speakers: null,
+                        retention_days: null,
+                        protect_from_deletion: false,
+                        auto_share_on_apply: true,
+                        share_with_group_lead: true
+                    };
+                    teamFolderError.value = '';
+                };
+
+                const loadTeamFolders = async (groupId) => {
+                    try {
+                        const response = await fetch(`/api/groups/${groupId}/folders`);
+                        if (!response.ok) throw new Error('Failed to load group folders');
+                        const data = await response.json();
+                        teamFolders.value = data.folders || [];
+                    } catch (error) {
+                        teamFolderError.value = error.message;
+                    }
+                };
+
+                const editTeamFolder = (folder) => {
+                    editingTeamFolderId.value = folder.id;
+                    newTeamFolder.value = {
+                        name: folder.name,
+                        color: folder.color || '#10B981',
+                        custom_prompt: folder.custom_prompt || '',
+                        title_prompt: folder.title_prompt || '',
+                        default_language: folder.default_language || '',
+                        default_min_speakers: folder.default_min_speakers,
+                        default_max_speakers: folder.default_max_speakers,
+                        retention_days: folder.retention_days,
+                        protect_from_deletion: folder.protect_from_deletion || false,
+                        auto_share_on_apply: folder.auto_share_on_apply !== undefined ? folder.auto_share_on_apply : true,
+                        share_with_group_lead: folder.share_with_group_lead !== undefined ? folder.share_with_group_lead : true
+                    };
+                    document.querySelector('.max-h-\\[90vh\\]')?.scrollTo({ top: 0, behavior: 'smooth' });
+                };
+
+                const cancelEditTeamFolder = () => {
+                    editingTeamFolderId.value = null;
+                    newTeamFolder.value = {
+                        name: '',
+                        color: '#10B981',
+                        custom_prompt: '',
+                        title_prompt: '',
+                        default_language: '',
+                        default_min_speakers: null,
+                        default_max_speakers: null,
+                        retention_days: null,
+                        protect_from_deletion: false,
+                        auto_share_on_apply: true,
+                        share_with_group_lead: true
+                    };
+                    teamFolderError.value = '';
+                };
+
+                const saveTeamFolder = async () => {
+                    teamFolderError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const payload = {
+                            name: newTeamFolder.value.name,
+                            color: newTeamFolder.value.color,
+                            protect_from_deletion: newTeamFolder.value.protect_from_deletion,
+                            auto_share_on_apply: newTeamFolder.value.auto_share_on_apply,
+                            share_with_group_lead: newTeamFolder.value.share_with_group_lead
+                        };
+
+                        if (newTeamFolder.value.custom_prompt && newTeamFolder.value.custom_prompt.trim()) {
+                            payload.custom_prompt = newTeamFolder.value.custom_prompt.trim();
+                        }
+
+                        // Title instructions are always sent so clearing the field clears them (#400)
+
+                        payload.title_prompt = (newTeamFolder.value.title_prompt || '').trim() || null;
+                        if (newTeamFolder.value.default_language) {
+                            payload.default_language = newTeamFolder.value.default_language;
+                        }
+                        if (newTeamFolder.value.default_min_speakers) {
+                            payload.default_min_speakers = newTeamFolder.value.default_min_speakers;
+                        }
+                        if (newTeamFolder.value.default_max_speakers) {
+                            payload.default_max_speakers = newTeamFolder.value.default_max_speakers;
+                        }
+                        if (newTeamFolder.value.retention_days && newTeamFolder.value.retention_days > 0) {
+                            payload.retention_days = newTeamFolder.value.retention_days;
+                        }
+
+                        let response;
+                        if (editingTeamFolderId.value) {
+                            response = await fetch(`/api/folders/${editingTeamFolderId.value}`, {
+                                method: 'PUT',
+                                headers,
+                                body: JSON.stringify(payload)
+                            });
+                        } else {
+                            response = await fetch(`/api/groups/${currentTeam.value.id}/folders`, {
+                                method: 'POST',
+                                headers,
+                                body: JSON.stringify(payload)
+                            });
+                        }
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || (editingTeamFolderId.value ? 'Failed to update folder' : 'Failed to create folder'));
+                        }
+
+                        editingTeamFolderId.value = null;
+                        newTeamFolder.value = {
+                            name: '',
+                            color: '#10B981',
+                            custom_prompt: '',
+                            title_prompt: '',
+                            default_language: '',
+                            default_min_speakers: null,
+                            default_max_speakers: null,
+                            retention_days: null,
+                            protect_from_deletion: false,
+                            auto_share_on_apply: true,
+                            share_with_group_lead: true
+                        };
+                        await loadTeamFolders(currentTeam.value.id);
+                    } catch (error) {
+                        teamFolderError.value = error.message;
+                    }
+                };
+
+                const deleteTeamFolder = async (folder) => {
+                    if (!confirm(`Delete the folder "${folder.name}"? Recordings will be removed from this folder but not deleted.`)) return;
+
+                    teamFolderError.value = '';
+                    try {
+                        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                        const headers = {};
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
+                        const response = await fetch(`/api/folders/${folder.id}`, {
+                            method: 'DELETE',
+                            headers
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to delete folder');
+                        }
+
+                        await loadTeamFolders(currentTeam.value.id);
+                    } catch (error) {
+                        teamFolderError.value = error.message;
+                    }
+                };
+
+                const loadFoldersEnabled = async () => {
+                    try {
+                        const response = await fetch('/api/config');
+                        if (response.ok) {
+                            const config = await response.json();
+                            foldersEnabled.value = config.enable_folders === true;
+                        }
+                    } catch (error) {
+                        console.warn('Error loading config:', error);
+                    }
+                };
+
+                const formatFileSize = (bytes) => {
+                    if (!bytes || bytes === 0) return '0 Bytes';
+                    
+                    const k = 1024;
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                };
+                
+                const toggleDarkMode = () => {
+                    isDarkMode.value = !isDarkMode.value;
+                    if (isDarkMode.value) {
+                        document.documentElement.classList.add('dark');
+                        localStorage.setItem('darkMode', 'true');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                        localStorage.setItem('darkMode', 'false');
+                    }
+                };
+
+                const initializeDarkMode = () => {
+                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const savedMode = localStorage.getItem('darkMode');
+                    if (savedMode === 'true' || (savedMode === null && prefersDark)) {
+                        isDarkMode.value = true;
+                        document.documentElement.classList.add('dark');
+                    }
+                };
+
+                /**
+                 * Set up global click handler to close dropdowns when clicking outside
+                 * Provides elegant UX by closing menus when users click elsewhere
+                 */
+                const setupGlobalClickHandler = () => {
+                    document.addEventListener('click', (event) => {
+                        const target = event.target;
+
+                        // Close user menu if clicking outside of it
+                        if (isUserMenuOpen.value) {
+                            const userMenuButton = target.closest('[data-user-menu-toggle]');
+                            const userMenuDropdown = target.closest('[data-user-menu-dropdown]');
+
+                            if (!userMenuButton && !userMenuDropdown) {
+                                isUserMenuOpen.value = false;
+                            }
+                        }
+                    });
+                };
+
+                onMounted(async () => {
+                    loadGroups();
+                    loadFoldersEnabled();
+                    initializeDarkMode();
+                    setupGlobalClickHandler();
+                });
+
+                return {
+                    // i18n - bind to i18n instance to maintain context
+                    t: (key, params) => i18nInstance ? i18nInstance.t(key, params) : key,
+
+                    // State
+                    isTeamAdminOnly,
+                    activeTab,
+                    parseInstant,
+                    groups,
+                    globalRetentionDays,
+                    isDarkMode,
+                    isUserMenuOpen,
+                    toggleDarkMode,
+                    showTeamModal,
+                    showManageTeamModal,
+                    showDeleteTeamModal,
+                    showSyncSharesModal,
+                    showSyncResultsModal,
+                    showManageTeamTagsModal,
+                    editingTeam,
+                    teamToDelete,
+                    currentTeam,
+                    teamForm,
+                    teamError,
+                    teamMembers,
+                    teamMemberError,
+                    newMemberUserId,
+                    newMemberRole,
+                    availableUsers,
+                    teamTags,
+                    editingTeamTagId,
+                    newTeamTag,
+                    teamTagError,
+                    syncResults,
+                    users,
+                    loadGroups,
+                    openCreateTeamModal,
+                    openEditTeamModal,
+                    closeTeamModal,
+                    saveTeam,
+                    confirmDeleteTeam,
+                    deleteTeam,
+                    openManageTeamModal,
+                    closeManageTeamModal,
+                    loadTeamMembers,
+                    addTeamMember,
+                    updateMemberRole,
+                    removeTeamMember,
+                    syncTeamShares,
+                    confirmSyncShares,
+                    openManageTeamTagsModal,
+                    closeManageTeamTagsModal,
+                    loadTeamTags,
+                    editTeamTag,
+                    cancelEditTeamTag,
+                    saveTeamTag,
+                    deleteTeamTag,
+
+                    // Folders
+                    foldersEnabled,
+                    showManageTeamFoldersModal,
+                    teamFolders,
+                    editingTeamFolderId,
+                    newTeamFolder,
+                    teamFolderError,
+                    openManageTeamFoldersModal,
+                    closeManageTeamFoldersModal,
+                    loadTeamFolders,
+                    editTeamFolder,
+                    cancelEditTeamFolder,
+                    saveTeamFolder,
+                    deleteTeamFolder
+                }
+            },
+            delimiters: ['${', '}'] // Use different delimiters to avoid conflict with Flask's Jinja2
+            }).mount('#app');
+
+            // Hide loading overlay after Vue app is mounted
+            if (window.AppLoader) {
+                window.AppLoader.hide();
+            }
+        }); // End of initializeI18n().then()
+    </script>
+</body>
+</html>

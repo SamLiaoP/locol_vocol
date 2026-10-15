@@ -1,0 +1,1229 @@
+# Installation Guide
+
+This comprehensive guide covers deploying Speakr for production use, including detailed configuration options, performance tuning, and deployment best practices. While the Quick Start guide gets you running quickly, this guide provides everything you need for a robust production deployment.
+
+## Understanding Speakr's Architecture
+
+Before diving into installation, it's helpful to understand how Speakr works. The application integrates with external APIs for two main purposes: transcription services that convert your audio to text, and text generation services that power features like summaries, titles, and interactive chat. Speakr is designed to be flexible, supporting both cloud-based services like OpenAI and self-hosted solutions running on your own infrastructure.
+
+Speakr uses a **connector-based architecture** for transcription services, providing a unified interface regardless of which provider you choose. The following connectors are currently available:
+
+1. **ASR Endpoint** (Recommended for best quality) - For self-hosted solutions like WhisperX that offer GPU-accelerated transcription with superior accuracy, voice profiles, and speaker diarization
+2. **OpenAI Transcribe** - Uses `gpt-4o-transcribe-diarize` for cloud-based speaker diarization without requiring additional containers
+3. **Mistral Voxtral** - Cloud-based transcription with built-in diarization and language detection via the Mistral API
+4. **VibeVoice ASR** - Microsoft's self-hosted multimodal ASR model with diarization, timestamps, and 50+ language support, served via vLLM
+5. **OpenAI Whisper** - Legacy whisper-1 model for basic transcription using any legacy OpenAI compatible whisper API
+
+The connector can be specified or inferred based on your configuration. For text generation, Speakr uses the OpenAI Chat Completions API format with the `/chat/completions` endpoint, which is widely supported across different AI providers.
+
+## Prerequisites
+
+For a production deployment, ensure your system meets these requirements. You'll need Docker Engine version 20.10 or later and Docker Compose version 2.0 or later. The system should have at least 4GB of RAM, with 8GB recommended for optimal performance, especially if you're processing longer recordings. Plan for at least 20GB of free disk space to accommodate recordings and transcriptions, though actual requirements will depend on your usage patterns. The server should have a stable internet connection for API calls to transcription and AI services, unless you're running everything locally.
+
+## Choosing Your Deployment Method
+
+You have two main options for deploying Speakr. The first and recommended approach is using the pre-built Docker image from Docker Hub, which requires no source code and gets you running quickly. The second option is building from source, which is useful if you need to modify the code or prefer to build your own images. Both methods use Docker Compose for orchestration and management.
+
+## Standard Installation Using Pre-Built Image
+
+### Step 1: Create Installation Directory
+
+Choose an appropriate location for your Speakr installation. This directory will contain your configuration files and data volumes. For production deployments, using a dedicated directory like `/opt/speakr` or `/srv/speakr` is recommended as it provides a clear separation from user home directories and follows Linux filesystem hierarchy standards.
+
+```bash
+mkdir -p /opt/speakr
+cd /opt/speakr
+```
+
+If you're just testing or running Speakr for personal use, you can create the directory in your home folder instead. The location isn't critical, but keeping everything organized in one place makes management easier.
+
+### Step 2: Create Docker Compose Configuration
+
+Create a `docker-compose.yml` file with the following configuration:
+
+```yaml
+services:
+  app:
+    image: learnedmachine/speakr:latest
+    container_name: speakr
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/data/uploads
+      - ./instance:/data/instance
+```
+
+**Choosing an image tag:**
+
+| Tag | Size | Description |
+|-----|------|-------------|
+| `latest` | ~4.4GB | Full image with semantic search via PyTorch embeddings |
+| `lite` | ~725MB | Lightweight image without PyTorch — all features work, Inquire Mode falls back to text search |
+
+If you don't plan to use Inquire Mode's semantic search (or are fine with basic text search), the `lite` tag is recommended for faster pulls and less disk usage. Just replace `latest` with `lite` in the configuration above.
+
+Or download the example configuration:
+
+```bash
+wget https://raw.githubusercontent.com/murtaza-nasir/speakr/master/config/docker-compose.example.yml -O docker-compose.yml
+```
+
+The restart policy `unless-stopped` ensures Speakr automatically starts after system reboots unless you've explicitly stopped it. The volumes mount local directories for persistent storage of uploads and database files.
+
+### Step 3: Environment Configuration
+
+The environment configuration is where you tell Speakr which AI services to use and how to connect to them. Download the appropriate environment template based on your transcription service choice. This template contains all the configuration variables with helpful comments explaining each setting.
+
+#### For OpenAI with Speaker Diarization (Cloud-Based)
+
+If you don't want to self-host a transcription service, the easiest way to get speaker diarization is using OpenAI's `gpt-4o-transcribe-diarize` model. This requires only an OpenAI API key—no additional containers needed.
+
+Download the unified transcription configuration template:
+
+```bash
+wget https://raw.githubusercontent.com/murtaza-nasir/speakr/master/config/env.transcription.example -O .env
+```
+
+Configure your transcription service with just two key settings:
+
+```bash
+TRANSCRIPTION_API_KEY=sk-your-openai-key-here
+TRANSCRIPTION_MODEL=gpt-4o-transcribe-diarize
+```
+
+The connector automatically detects that you want the OpenAI Transcribe connector based on the model name. Other available models:
+
+- `gpt-4o-transcribe` - High quality without diarization
+- `gpt-4o-mini-transcribe` - Cost-effective option
+- `whisper-1` - Legacy model (uses Whisper connector)
+
+> **Note:** For longer files (over ~23 minutes) using `gpt-4o-transcribe-diarize`, speaker tracking across chunks supports up to 4 speakers. Recordings with more speakers may have inconsistent labels across sections.
+
+Now configure the text generation model that powers summaries, titles, and chat features. OpenRouter is recommended here because it provides access to multiple AI models at competitive prices, but you can use any OpenAI-compatible service:
+
+```bash
+TEXT_MODEL_BASE_URL=https://openrouter.ai/api/v1
+TEXT_MODEL_API_KEY=sk-or-v1-your-key-here
+TEXT_MODEL_NAME=openai/gpt-4o-mini
+```
+
+If you prefer to use OpenAI directly for text generation, simply change the base URL to `https://api.openai.com/v1` and use your OpenAI API key. You can also use local models through Ollama or LM Studio by pointing to `http://localhost:11434/v1` or similar.
+
+> **Tip:** For advanced model configuration options—including GPT-5 support, separate chat model settings for different service tiers, and cost optimization strategies—see the [Model Configuration](../admin-guide/model-configuration.md) guide.
+
+#### For Legacy OpenAI Whisper API
+
+If you prefer the legacy Whisper API (without diarization), you can still use the legacy configuration:
+
+```bash
+wget https://raw.githubusercontent.com/murtaza-nasir/speakr/master/config/env.whisper.example -O .env
+```
+
+Configure the transcription service:
+
+```bash
+TRANSCRIPTION_BASE_URL=https://api.openai.com/v1
+TRANSCRIPTION_API_KEY=sk-your-openai-key-here
+TRANSCRIPTION_MODEL=whisper-1
+```
+
+> **Note:** The `WHISPER_MODEL` variable is deprecated. Use `TRANSCRIPTION_MODEL` instead.
+
+#### For Self-Hosted ASR Endpoint (Recommended for Best Quality)
+
+For the best transcription and diarization quality, self-hosting an ASR service is recommended. Based on testing, the WhisperX ASR Service with the latest pyannote models provides significantly better transcription accuracy and speaker diarization than cloud-based alternatives, especially when using large models like `large-v3`. **This requires running an additional Docker container** alongside Speakr, but provides powerful features including voice profiles that remember speakers across recordings.
+
+**ASR Service Options:**
+
+1. **WhisperX ASR Service (Recommended)** - Best transcription quality with voice profile support
+    - Repository: [murtaza-nasir/whisperx-asr-service](https://github.com/murtaza-nasir/whisperx-asr-service)
+    - Uses `pyannote/speaker-diarization-community-1` model with exclusive diarization
+    - **Superior transcription and diarization quality** with large models (large-v3, distil-large-v3)
+    - Returns speaker embeddings for voice profile identification
+    - Better timestamp alignment between speakers and words
+    - **Required for:** Voice profiles, automatic speaker recognition, speaker embeddings
+    - **Environment file:** `config/env.whisperx.example`
+    - **Required setting:** `ASR_RETURN_SPEAKER_EMBEDDINGS=true` to enable voice profile features
+
+2. **OpenAI Whisper ASR Webservice** - For basic speaker diarization without voice profiles
+    - Repository: [ahmetoner/whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice)
+    - Uses `pyannote/speaker-diarization-3.1` model
+    - Simpler setup, less resource intensive
+    - **Supports:** Basic speaker identification (Speaker 1, Speaker 2, etc.)
+    - **Does not support:** Voice profiles, speaker embeddings, automatic speaker recognition
+    - **Environment file:** `config/env.asr.example`
+    - **Note:** Do not set `ASR_RETURN_SPEAKER_EMBEDDINGS=true` with this service as it will cause errors
+
+3. **OpenASR** - Local server with diarization and, from openasr#379 onward, speaker embeddings
+    - Website: [openasr.org](https://openasr.org)
+    - **Supports:** Speaker diarization with an exact speaker count, voice profiles when embeddings are enabled
+    - **Environment file:** `config/env.transcription.example` (OpenASR section)
+    - **Setting:** `ASR_RETURN_SPEAKER_EMBEDDINGS=true` to enable voice profile features on a server that supports it
+
+> **Important:** Before proceeding with this configuration, you'll need to set up one of the ASR service containers. See [Running ASR Service for Speaker Diarization](#running-asr-service-for-speaker-diarization) for complete instructions on deploying both containers together or separately.
+
+Download the appropriate ASR configuration template:
+
+```bash
+# For WhisperX ASR Service (with voice profiles):
+wget https://raw.githubusercontent.com/murtaza-nasir/speakr/master/config/env.whisperx.example -O .env
+
+# OR for basic ASR (without voice profiles):
+wget https://raw.githubusercontent.com/murtaza-nasir/speakr/master/config/env.asr.example -O .env
+```
+
+The ASR configuration tells Speakr where to find your ASR service. Simply set the base URL and Speakr will automatically detect ASR mode:
+
+```bash
+# For WhisperX ASR Service:
+ASR_BASE_URL=http://whisperx-asr:9000
+
+# OR for basic ASR Webservice:
+ASR_BASE_URL=http://whisper-asr:9000
+```
+
+> **Note:** The `USE_ASR_ENDPOINT=true` setting is deprecated. Just setting `ASR_BASE_URL` automatically enables ASR mode.
+
+The ASR_BASE_URL depends on your deployment architecture:
+
+- **Same Docker Compose stack:** Use the service name (e.g., `http://whisperx-asr:9000` or `http://whisper-asr:9000`) - Docker's internal networking
+- **Separate machine:** Use the full URL with IP address or domain name (e.g., `http://192.168.1.100:9000`)
+
+Speaker diarization is automatically enabled when using ASR endpoints. The system will identify different speakers in your recordings and label them as Speaker 1, Speaker 2, and so on. You can optionally override the default speaker detection settings by uncommenting and adjusting ASR_MIN_SPEAKERS and ASR_MAX_SPEAKERS in your environment file. These two values are the instance-wide default: a speaker count chosen at upload, or set on a tag or folder, takes precedence. When only a minimum is set on a tag and it is above ASR_MAX_SPEAKERS, the tag value is used for both.
+
+**Voice Profile Configuration:**
+
+If you're using WhisperX ASR Service and want to enable voice profile features (automatic speaker recognition across recordings), add this to your `.env` file:
+
+```bash
+ASR_RETURN_SPEAKER_EMBEDDINGS=true
+```
+
+This setting is disabled by default because it's only supported by WhisperX. If you're using the basic OpenAI Whisper ASR Webservice, leave this setting disabled or omit it entirely to avoid errors.
+
+#### For Mistral Voxtral (Cloud-Based Diarization)
+
+Mistral's Voxtral model provides cloud-based transcription with built-in speaker diarization and automatic language detection. It requires a Mistral API key and no additional infrastructure. Voxtral handles chunking internally, so large files work without any extra configuration.
+
+```bash
+TRANSCRIPTION_CONNECTOR=mistral
+TRANSCRIPTION_API_KEY=your-mistral-api-key
+TRANSCRIPTION_MODEL=voxtral-mini-latest
+```
+
+Configure the text generation model as described above for summaries and chat features.
+
+#### For VibeVoice ASR (Self-Hosted via vLLM)
+
+Microsoft's VibeVoice ASR model provides transcription with speaker diarization, timestamps, and language detection for 50+ languages. It runs entirely on your own hardware via vLLM, so there's no cloud dependency. The model handles up to 60 minutes of audio per request, and longer files are automatically chunked by the app.
+
+You'll need a vLLM server with the VibeVoice model loaded. The bf16 model requires roughly 18GB of VRAM, which fits on two consumer GPUs (like 2x RTX 3090) using tensor parallelism. See the [VibeVoice model page](https://huggingface.co/microsoft/VibeVoice-ASR) for vLLM setup instructions.
+
+```bash
+TRANSCRIPTION_CONNECTOR=vibevoice
+TRANSCRIPTION_BASE_URL=http://your-vllm-server:8000
+TRANSCRIPTION_MODEL=vibevoice
+```
+
+If your vLLM server requires authentication, also set `TRANSCRIPTION_API_KEY`. Configure the text generation model as described above for summaries and chat features.
+
+#### For AssemblyAI (Cloud-Based Diarization)
+
+AssemblyAI is a cloud transcription provider with strong speaker diarization on long, multi-speaker recordings. It is not OpenAI-compatible (it uses its own asynchronous upload-and-poll API), so it has a dedicated connector. It ingests files up to 10 hours in a single job, so the app does not chunk for it. New accounts get free credits and no credit card is required to create an API key.
+
+```bash
+TRANSCRIPTION_CONNECTOR=assemblyai
+TRANSCRIPTION_API_KEY=your-assemblyai-api-key
+```
+
+The AssemblyAI endpoint is fixed, so the shared `TRANSCRIPTION_BASE_URL` and `TRANSCRIPTION_MODEL` are intentionally ignored for this connector (a leftover value from another connector will not misroute requests). To pin a speech model, set `ASSEMBLYAI_SPEECH_MODEL` (for example `universal-3-pro`); omit it to use your account default. Speaker diarization and hotwords come from each user's settings (hotwords map to AssemblyAI's word boost). Configure the text generation model as described above for summaries and chat features.
+
+### Step 4: Configure System Settings
+
+One of Speakr's conveniences is automatic admin account creation. Instead of going through a registration process, you define the admin credentials in your environment file, and Speakr creates the account automatically on first startup. This ensures you can log in immediately without any additional setup steps:
+
+```bash
+ADMIN_USERNAME=admin
+ADMIN_EMAIL=admin@your-domain.com
+ADMIN_PASSWORD=your-secure-password-here
+```
+
+Choose a strong password for this account as it has full system access, including the ability to manage users and view all recordings. The admin account is special and cannot be created through the regular registration process, only through these environment variables.
+
+Next, configure how the application behaves. These settings control user access and system operation:
+
+```bash
+ALLOW_REGISTRATION=false
+REGISTRATION_ALLOWED_DOMAINS=
+LOG_LEVEL="INFO"
+```
+
+Setting `ALLOW_REGISTRATION=false` means only the admin can create new user accounts, which is recommended for private installations where you want to control access. If you're running Speakr for a group or family, this prevents random people from creating accounts. If you enable registration and want to restrict it to specific email domains (e.g., for corporate use), set `REGISTRATION_ALLOWED_DOMAINS` to a comma-separated list of domains like `company.com,subsidiary.org`. Leave it empty to allow all domains. The log level controls how much information Speakr writes to its logs. Use `INFO` during initial setup and testing to see what's happening, then switch to `ERROR` for production to reduce log volume and improve performance.
+
+### Step 5: Configure Advanced Features
+
+#### Large File Handling
+
+Speakr automatically handles large audio files through intelligent chunking. The behavior depends on which transcription connector you're using:
+
+**Connector-Aware Chunking:**
+
+| Connector | Chunking Behavior |
+|-----------|-------------------|
+| **ASR Endpoint** | Handled internally by the ASR service—no app-level chunking needed |
+| **OpenAI Transcribe** | Handled internally using `chunking_strategy=auto`—no app-level chunking needed |
+| **OpenAI Whisper** | App-level chunking for files >25MB using your configured settings |
+
+For the OpenAI Whisper connector, you can customize chunking behavior:
+
+```bash
+ENABLE_CHUNKING=true
+CHUNK_LIMIT=20MB
+CHUNK_OVERLAP_SECONDS=3
+```
+
+When chunking is enabled, Speakr automatically detects when a file exceeds the configured limit and splits it into smaller pieces. Each chunk is processed separately, and the transcriptions are seamlessly merged back together. The overlap setting ensures that no words are lost at chunk boundaries, which is especially important for continuous speech. The chunk limit can be specified as a file size like `20MB` or as a duration like `20m` for 20 minutes.
+
+> **Note:** These chunking settings are ignored when using ASR Endpoint or OpenAI Transcribe connectors, as those services handle large files internally.
+
+#### Audio Compression
+
+Speakr can automatically compress lossless audio uploads to save storage space. This is particularly useful when users upload large WAV or AIFF files from professional recording equipment or phone apps that record in uncompressed formats.
+
+```bash
+AUDIO_COMPRESS_UPLOADS=true
+AUDIO_CODEC=mp3
+AUDIO_BITRATE=128k
+```
+
+When enabled (the default), lossless files are automatically converted on upload:
+
+| Setting | Options | Description |
+|---------|---------|-------------|
+| `AUDIO_COMPRESS_UPLOADS` | `true`/`false` | Enable automatic compression (default: `true`) |
+| `AUDIO_CODEC` | `mp3`, `flac`, `opus` | Target format (default: `mp3`) |
+| `AUDIO_BITRATE` | e.g., `64k`, `128k`, `192k` | Bitrate for lossy codecs (default: `128k`) |
+
+**Codec options:**
+
+- **mp3** - Lossy compression, excellent compatibility, smallest files (~90% reduction from WAV)
+- **flac** - Lossless compression, preserves full audio quality (~50-70% reduction from WAV)
+- **opus** - Modern lossy codec, efficient compression, good for speech
+
+Already-compressed formats (MP3, AAC, OGG, M4A, etc.) are never re-encoded to avoid quality degradation. Only truly lossless formats (WAV, AIFF) are compressed.
+
+**Excluding unsupported codecs:**
+
+Some transcription services don't support certain audio codecs. For example, vLLM-hosted Whisper instances may not support Opus. If you encounter "format not recognised" errors, you can exclude specific codecs from Speakr's supported list, forcing them to be converted before transcription:
+
+```bash
+# Exclude a single codec
+AUDIO_UNSUPPORTED_CODECS=opus
+
+# Exclude multiple codecs (comma-separated)
+AUDIO_UNSUPPORTED_CODECS=opus,vorbis
+```
+
+Supported codecs by default: `pcm_s16le`, `pcm_s24le`, `pcm_f32le`, `mp3`, `flac`, `opus`, `vorbis`, `aac`. Any codec listed in `AUDIO_UNSUPPORTED_CODECS` will be automatically converted to your target format (set by `AUDIO_CODEC`) before being sent to the transcription service.
+
+!!! tip "Storage Savings Example"
+    A 500MB WAV recording compressed to MP3 at 128k becomes roughly 50MB - a 90% reduction. For lossless preservation, FLAC typically achieves 50-70% reduction while maintaining perfect audio quality.
+
+#### Video Retention
+
+By default, when users upload video files, Speakr extracts the audio and discards the video stream. If you want to preserve video for in-browser playback alongside the transcript, enable video retention:
+
+```bash
+VIDEO_RETENTION=true
+```
+
+When enabled, the original video file is kept and served with a native `<video>` player. Audio is extracted to a temporary file for transcription only, then cleaned up automatically. All player controls (seek, speed, volume) work identically. This is particularly useful for presentations, lectures, and screen recordings where the visual context adds value. Storage overhead is modest — video streams are typically only 10-20% of the total file size for presentation-style content.
+
+#### Video Passthrough to ASR
+
+If you run a custom ASR backend that accepts video files directly (e.g., one that extracts multiple audio tracks internally), you can skip Speakr's audio extraction entirely:
+
+```bash
+VIDEO_PASSTHROUGH_ASR=true
+```
+
+When enabled, video files are sent as-is to the ASR connector — no audio extraction, codec conversion, or chunking is performed. This only affects video uploads; audio files are processed normally. You can combine this with `VIDEO_RETENTION=true` to also keep the video for in-browser playback.
+
+!!! warning
+    Only enable this if your ASR backend actually accepts video files. Standard transcription APIs (OpenAI, etc.) will reject raw video input.
+
+#### Concurrent Upload Limit
+
+Control how many files upload simultaneously when batch uploading:
+
+```bash
+MAX_CONCURRENT_UPLOADS=3  # default
+```
+
+Higher values speed up batch uploads but use more bandwidth and server resources.
+
+#### Server-Side Recording Sessions (optional)
+
+By default, in-app recordings are buffered in the browser's memory and uploaded when you press Stop, which limits how long a single recording can run. You can opt into server-side recording sessions instead, where audio chunks stream to the server as they are produced:
+
+```bash
+ENABLE_SERVER_RECORDING_CHUNKS=true
+RECORDING_MAX_HOURS=8  # default
+```
+
+When enabled, recordings are no longer constrained by browser RAM, so you can capture hours-long sessions, and an interrupted recording can resume if the tab is reloaded or closed. `RECORDING_MAX_HOURS` sets an absolute ceiling on a single recording (default 8 hours). For tuning the per-user storage cap and other details, see the [Server-Side Recording Sessions](../admin-guide/recording-sessions.md) guide.
+
+#### Inquire Mode for Semantic Search
+
+Inquire Mode transforms Speakr from a simple transcription tool into a knowledge base of all your recordings. When enabled, you can search across all your transcriptions using natural language questions:
+
+```bash
+ENABLE_INQUIRE_MODE=true
+```
+
+With Inquire Mode active, Speakr creates embeddings of your transcriptions that enable semantic search. This means you can ask questions like "When did we discuss the marketing budget?" and find relevant recordings even if those exact words weren't used. The feature requires additional processing during transcription but provides powerful search capabilities that become more valuable as your recording library grows.
+
+#### Automated File Processing
+
+The automated file processing feature, sometimes called the "black hole" directory, monitors a designated folder for new audio files and automatically processes them without manual intervention. This is perfect for integrating with recording devices, automated workflows, or batch processing scenarios:
+
+```bash
+ENABLE_AUTO_PROCESSING=true
+AUTO_PROCESS_MODE=admin_only
+AUTO_PROCESS_WATCH_DIR=/data/auto-process
+AUTO_PROCESS_CHECK_INTERVAL=30
+```
+
+When enabled, Speakr checks the watch directory every 30 seconds for new audio files. Any files found are automatically moved to the uploads directory and processed using your configured transcription settings. The `admin_only` mode assigns all processed files to the admin user, but you can also configure it for multi-user scenarios with separate directories for each user (`AUTO_PROCESS_MODE=user_directories`). Per-user subfolders may be named after the user id (`user123` or `123`) or after the username itself, mirroring the naming of the per-user export folders.
+
+To use this feature, you'll need to mount an additional volume in your Docker Compose configuration, which we'll cover in the next steps.
+
+#### File Storage Backend (Local / S3-Compatible)
+
+Speakr supports two storage backends for recording audio files: **local filesystem** (default) and **S3-compatible object storage** (AWS S3, MinIO, and other S3 API providers). You can switch between them using a single environment variable:
+
+```bash
+# Storage backend: local (default) or s3
+FILE_STORAGE_BACKEND=local
+
+# Key prefix inside the selected backend (default: recordings)
+FILE_STORAGE_KEY_PREFIX=recordings
+
+# Optional staging directory for uploads/conversion before final store
+# FILE_STORAGE_STAGING_DIR=/data/uploads/_staging
+```
+
+When set to `local`, audio files are stored under `UPLOAD_FOLDER` as before — no additional configuration is needed.
+
+To use **S3 or MinIO**, set `FILE_STORAGE_BACKEND=s3` and configure the S3 connection:
+
+```bash
+FILE_STORAGE_BACKEND=s3
+
+S3_BUCKET_NAME=speakr-audio
+S3_REGION=us-east-1
+S3_ENDPOINT_URL=http://minio:9000       # For MinIO / custom S3-compatible endpoints
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadmin
+S3_USE_PATH_STYLE=true                   # Required for MinIO
+S3_VERIFY_SSL=false                      # Set false for local MinIO without TLS
+
+# Presigned URL TTL (seconds) for audio playback/download
+S3_PRESIGN_TTL_SECONDS=900               # Private access (default 15 min)
+S3_PRESIGN_PUBLIC_TTL_SECONDS=300        # Shared links (default 5 min)
+```
+
+!!! info "How S3 Audio Delivery Works"
+    When using S3 storage, audio endpoints return a `302` redirect to a short-lived presigned URL instead of streaming the file through the backend. This keeps bandwidth off your application server while preserving compatibility with `<audio>` tags and direct downloads. The presigned URLs expire according to the TTL settings above.
+
+!!! tip "Mixed Storage Support"
+    Speakr can read from **both** local and S3 storage simultaneously. Existing local recordings continue to work even after switching `FILE_STORAGE_BACKEND=s3` — only new uploads go to S3. This allows a gradual transition. See the [Migration Guide](../admin-guide/migration-guide.md#migrating-audio-files-to-s3) for details on migrating historical files.
+
+!!! warning "boto3 Required"
+    S3 support requires the `boto3` Python package, which is included in the default Docker image. If you build from source, ensure `boto3>=1.34.0` is installed.
+
+### Step 6: Set Up Data Directories
+
+Speakr needs local directories to store your data persistently. These directories are mounted as Docker volumes, ensuring your recordings and database survive container updates and restarts:
+
+```bash
+mkdir -p uploads instance
+chmod 755 uploads instance
+```
+
+The `uploads` directory stores all your audio files and their transcriptions, organized by user. The `instance` directory contains the SQLite database that tracks all your recordings, users, and settings. Setting the permissions to 755 ensures the Docker container can read and write to these directories while maintaining reasonable security.
+
+If you're using the automated file processing feature, create that directory as well:
+
+```bash
+mkdir -p auto-process
+chmod 755 auto-process
+```
+
+#### Using PostgreSQL Instead of SQLite
+
+By default, Speakr uses SQLite for its database, which is perfect for most installations and requires no additional setup.
+However, if you need the scalability and concurrent access capabilities of PostgreSQL, Speakr fully supports it.
+
+**Configuration:**
+
+To use PostgreSQL, set the `SQLALCHEMY_DATABASE_URI` environment variable in your `.env` file:
+
+```bash
+SQLALCHEMY_DATABASE_URI=postgresql://username:password@hostname:5432/database_name
+```
+
+### Step 7: Launch Speakr
+
+With everything configured, you're ready to start Speakr. The `-d` flag runs the container in detached mode, meaning it continues running in the background:
+
+```bash
+docker compose up -d
+```
+
+The first time you run this command, Docker will download the Speakr image from Docker Hub. The `latest` image is approximately 4.4GB (or ~725MB for the `lite` tag) and contains all the dependencies needed to run Speakr, including FFmpeg for audio processing and various Python libraries. The download time depends on your internet connection speed.
+
+Monitor the startup process to ensure everything is working correctly:
+
+```bash
+docker compose logs -f app
+```
+
+Watch the logs for any error messages. You should see messages about database initialization, admin user creation, and finally a message indicating the Flask application is running on port 8899. Press Ctrl+C to stop following the logs (this won't stop the container, just the log viewing).
+
+### Step 8: Verify Installation
+
+Open your web browser and navigate to `http://your-server:8899`, replacing `your-server` with your actual server address or `localhost` if you're running locally. You should see the Speakr login page with its distinctive gradient design.
+
+Log in using the admin credentials you configured in the environment file. If login fails, check your Docker logs to ensure the admin user was created successfully. Sometimes typos in the environment file can cause issues.
+
+Once logged in, test the installation by creating a test recording or uploading a sample audio file. The recording interface should show options for microphone, system audio, or both. Try uploading a small audio file first to verify that your API keys are working correctly. The transcription process should complete within a few moments for short files, and you should see the transcribed text appear along with an AI-generated summary.
+
+If transcription fails, check the Docker logs for API authentication errors or connection issues. Common problems include incorrect API keys, insufficient API credits, or network connectivity issues.
+
+## Production Security Hardening
+
+Speakr ships with safe defaults, but a production deployment on a public
+network should confirm the following.
+
+### Secret key
+
+`SECRET_KEY` signs session cookies and email / password-reset tokens. If you
+leave it unset, Speakr now generates a strong random key on first start and
+persists it to `instance/secret_key` inside your data volume, so a deployment
+is never silently exploitable. The old built-in default key is refused at
+startup.
+
+For most single-host installs the auto-generated key is fine and is captured
+by any normal backup of the data volume. Set `SECRET_KEY` explicitly when you
+run multiple app hosts that must share sessions, or when you want to control
+key rotation:
+
+```bash
+SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+```
+
+The key does **not** encrypt stored data — losing it only forces users to log
+in again and invalidates outstanding reset links, never any recordings or
+transcripts. You do not need to archive it separately to restore your data.
+
+### HTTPS and the session cookie
+
+Terminate TLS at a reverse proxy (nginx, Caddy, Traefik) and serve Speakr over
+HTTPS. When you do, set:
+
+```bash
+SESSION_COOKIE_SECURE=true
+```
+
+so the session cookie is only ever sent over TLS. It defaults to `false` so
+plain-HTTP LAN installs keep working out of the box.
+
+### Security headers
+
+The app sets `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
+`Permissions-Policy`, a `Content-Security-Policy`, and (over HTTPS)
+`Strict-Transport-Security` on every response, so you are protected even
+without a hardening proxy. If your proxy already sets all of these, you can
+disable the app's copies with `SECURITY_HEADERS_ENABLED=false`. To customise:
+
+```bash
+# Replace the whole Content-Security-Policy:
+CONTENT_SECURITY_POLICY=default-src 'self'; ...
+# Tune or disable HSTS (empty string disables it, e.g. if your proxy sets it):
+HSTS_HEADER=max-age=63072000; includeSubDomains
+```
+
+Note the default CSP allows `'unsafe-inline'` and `'unsafe-eval'` for scripts
+because the bundled Vue build compiles templates in the browser; the policy
+still restricts framing, object/base/form targets, and the origins scripts,
+images, and connections may use.
+
+### Reverse-proxy hops
+
+`TRUSTED_PROXY_HOPS` (default `1`) controls how many `X-Forwarded-For` /
+`X-Forwarded-Proto` hops are trusted for client-IP and HTTPS detection. Set it
+to the actual number of proxies in front of the app so rate limiting and HSTS
+behave correctly and forwarded headers cannot be spoofed.
+
+## Advanced Deployment Scenarios
+
+### Running ASR Service for Speaker Diarization
+
+If you need speaker diarization to identify different speakers in your recordings, you'll need to run an ASR service alongside Speakr. There are two options depending on whether you need voice profile features:
+
+#### Option 1: WhisperX ASR Service (Recommended - Supports Voice Profiles)
+
+**Use this if you want:**
+
+- AI-powered speaker voice profiles with automatic recognition
+- 256-dimensional speaker embeddings
+- Better speaker-to-word timestamp alignment
+- Exclusive diarization for cleaner speaker transitions
+
+**Prerequisites:**
+
+1. **Hugging Face Account & Model Access** - Visit and accept terms for ALL models:
+    - [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1)
+    - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+    - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0)
+
+2. **Generate HF Token** - Create a read-access token at [Hugging Face Settings](https://huggingface.co/settings/tokens)
+
+3. **GPU Requirements** - NVIDIA GPU with 14GB+ VRAM for large-v3 model (RTX 3090/4090 recommended)
+
+**Setup Instructions:**
+
+Clone the WhisperX ASR Service repository:
+```bash
+git clone https://github.com/murtaza-nasir/whisperx-asr-service.git
+cd whisperx-asr-service
+
+# Copy environment file
+cp .env.example .env
+
+# Edit .env and add your Hugging Face token
+nano .env  # Set HF_TOKEN=hf_xxxxx...
+
+# Build and start
+docker compose up -d
+
+# Verify it's running
+curl http://localhost:9000/health
+```
+
+Prebuilt images are also published per release, so you can pull instead of building: `learnedmachine/whisperx-asr-service:latest` covers Pascal through Hopper GPUs as well as CPU, and `learnedmachine/whisperx-asr-service:blackwell` covers RTX 50xx cards (the plain `:blackwell` tag is available as of v0.4.0). To use one, replace the `build:` section in the compose snippet below with the corresponding `image:` line.
+
+See the [WhisperX ASR Service README](https://github.com/murtaza-nasir/whisperx-asr-service#readme) for detailed configuration options, troubleshooting, and performance tuning.
+
+!!! warning "PyTorch 2.6 Compatibility"
+    If you encounter a "Weights only load failed" error, add `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true` to your ASR container's environment variables in docker-compose.yml. See [troubleshooting](../troubleshooting.md#pytorch-26-weights-loading-error-whisperx-asr-service) for details.
+
+#### Option 2: OpenAI Whisper ASR Webservice (Basic Diarization Only)
+
+**Use this if you:**
+
+- Only need basic speaker identification (Speaker 1, Speaker 2, etc.)
+- Don't need voice profiles or speaker embeddings
+- Want simpler setup with lower resource requirements
+
+**Prerequisites:**
+
+1. **Hugging Face Account & Model Access** - Visit and accept terms:
+    - [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1)
+    - [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0)
+
+2. **Generate HF Token** - Create a read-access token at [Hugging Face Settings](https://huggingface.co/settings/tokens)
+
+**Setup Instructions:**
+
+Visit the [ahmetoner/whisper-asr-webservice repository](https://github.com/ahmetoner/whisper-asr-webservice) for complete setup instructions.
+
+#### Deploying ASR Service with Speakr
+
+Once you've chosen and set up your ASR service, you can deploy it alongside Speakr in several ways:
+
+**Same Machine - Combined Docker Compose (Recommended)**
+
+Example with WhisperX ASR Service (for voice profiles):
+
+```yaml
+services:
+  whisperx-asr:
+    build:
+      context: ./whisperx-asr-service
+      dockerfile: Dockerfile
+    container_name: whisperx-asr-api
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - DEVICE=cuda
+      - COMPUTE_TYPE=float16
+      - BATCH_SIZE=16
+      - HF_TOKEN=your_huggingface_token_here
+      # Store all Hugging Face downloads (including the pyannote diarization
+      # model) in the cache volume below. Without this, the diarization model
+      # is cached inside the container filesystem and is lost whenever the
+      # container is recreated.
+      - HF_HOME=/.cache
+      - TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true  # Required for PyTorch 2.6+
+      # Uncomment after one successful online run with diarization to run
+      # fully offline (models must already be in the cache volume):
+      # - HF_HUB_OFFLINE=1
+      # Unload idle models from VRAM after this many seconds
+      # (0 = keep resident, the default):
+      # - MODEL_KEEP_ALIVE_SECONDS=3600
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - whisperx-cache:/.cache
+    networks:
+      - speakr-network
+
+  app:
+    image: learnedmachine/speakr:latest
+    container_name: speakr
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/data/uploads
+      - ./instance:/data/instance
+    depends_on:
+      - whisperx-asr
+    networks:
+      - speakr-network
+
+networks:
+  speakr-network:
+    driver: bridge
+
+volumes:
+  whisperx-cache:
+    driver: local
+```
+
+In Speakr's `.env` file:
+```bash
+ASR_BASE_URL=http://whisperx-asr:9000
+```
+
+> **Note for Mac users:** GPU passthrough doesn't work on macOS due to Docker's architecture. Use CPU mode by setting `DEVICE=cpu` and `COMPUTE_TYPE=float32` in the environment variables. The ASR service will use CPU processing, which is slower but fully functional.
+
+**Important:** When running both services in the same Docker Compose file, use the service name (e.g., `whisperx-asr` or `whisper-asr`) in `ASR_BASE_URL`, not `localhost` or an IP address.
+
+#### Running Services in Separate Docker Compose Files
+
+If you prefer to manage the services independently or are adding the ASR service to an existing Speakr installation, you can run them in separate Docker Compose files. This approach gives you more flexibility and works whether the services are on the same machine or different machines.
+
+##### Option 1: Same Machine with Shared Network
+
+If both services run on the same machine, you can use Docker's internal networking for communication:
+
+First, create a shared Docker network:
+
+```bash
+docker network create speakr-network
+```
+
+Create `docker-compose.asr.yml` for the ASR service:
+
+```yaml
+services:
+  whisper-asr:
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: whisper-asr-webservice
+    ports:
+      - "9000:9000"
+    environment:
+      - ASR_MODEL=distil-large-v3
+      - ASR_COMPUTE_TYPE=int8
+      - ASR_ENGINE=whisperx
+      - HF_TOKEN=your_huggingface_token_here
+      - TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true  # Required for PyTorch 2.6+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              device_ids: ["0"]
+    restart: unless-stopped
+    networks:
+      - speakr-network
+
+networks:
+  speakr-network:
+    external: true
+```
+
+Update your Speakr `docker-compose.yml` to use the shared network:
+
+```yaml
+services:
+  app:
+    image: learnedmachine/speakr:latest
+    container_name: speakr
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/data/uploads
+      - ./instance:/data/instance
+    networks:
+      - speakr-network
+
+networks:
+  speakr-network:
+    external: true
+```
+
+In your `.env` file, use the container name:
+```bash
+ASR_BASE_URL=http://whisper-asr-webservice:9000
+```
+
+##### Option 2: Separate Machines
+
+When running on different machines, you don't need the shared network. Each service runs independently and communicates over the network using IP addresses or hostnames.
+
+On the ASR server, create `docker-compose.asr.yml`:
+
+```yaml
+services:
+  whisper-asr:
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: whisper-asr-webservice
+    ports:
+      - "9000:9000"  # Exposed to the network
+    environment:
+      - ASR_MODEL=distil-large-v3
+      - ASR_COMPUTE_TYPE=int8
+      - ASR_ENGINE=whisperx
+      - HF_TOKEN=your_huggingface_token_here
+      - TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true  # Required for PyTorch 2.6+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              device_ids: ["0"]
+    restart: unless-stopped
+```
+
+On the Speakr server, use the standard `docker-compose.yml`:
+
+```yaml
+services:
+  app:
+    image: learnedmachine/speakr:latest
+    container_name: speakr
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/data/uploads
+      - ./instance:/data/instance
+```
+
+In your Speakr `.env` file, use the ASR server's IP address or hostname:
+```bash
+# Using IP address
+ASR_BASE_URL=http://192.168.1.100:9000
+
+# Or using hostname
+ASR_BASE_URL=http://asr-server.local:9000
+```
+
+Start both services on their respective machines:
+
+```bash
+# On ASR server
+docker compose -f docker-compose.asr.yml up -d
+
+# On Speakr server
+docker compose up -d
+```
+
+Make sure port 9000 is accessible between the machines (check firewall rules if needed).
+
+## Production Considerations
+
+### Using a Reverse Proxy for SSL
+
+For production deployments, running Speakr behind a reverse proxy is essential for security and enabling all features. The browser recording feature, particularly system audio capture, requires HTTPS to work due to browser security restrictions. A reverse proxy handles SSL termination, meaning it manages the HTTPS certificates while communicating with Speakr over HTTP internally.
+
+Here's a complete nginx configuration for Speakr:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name speakr.yourdomain.com;
+
+    ssl_certificate /path/to/certificate.crt;
+    ssl_certificate_key /path/to/private.key;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Allow large uploads — match or exceed your Speakr MAX_CONTENT_LENGTH /
+    # max_file_size_mb. Set to 0 for unlimited.
+    client_max_body_size 4000M;
+
+    location / {
+        proxy_pass http://localhost:8899;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Stream the upload through to Speakr instead of buffering the whole
+        # file on the proxy first. Useful safety net for very large uploads
+        # that would otherwise exhaust the proxy's temp space.
+        proxy_request_buffering off;
+
+        # WebSocket support for live features. Forward the client's
+        # Connection header verbatim ($http_connection) so a regular POST
+        # upload keeps `Connection: keep-alive` and an actual WebSocket
+        # handshake keeps `Connection: upgrade`. Setting it to a literal
+        # "upgrade" on every request causes Gunicorn (Speakr's WSGI server)
+        # to return 500 errors on uploads.
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $http_connection;
+
+        # Timeouts for large file uploads
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name speakr.yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+```
+
+!!! warning "If your existing nginx config sets `Connection: "upgrade"` unconditionally"
+    A common pitfall: setting `proxy_set_header Connection "upgrade"` directly inside `location /` forwards `Connection: upgrade` on every request, including plain POST uploads. Gunicorn does not handle this gracefully on non-WebSocket requests and may return 500 errors with "Service unavailable" when uploading files through the proxy. The fix is to forward the client's actual Connection header instead: change the line to `proxy_set_header Connection $http_connection;` (a single-word change). An equivalent and slightly stricter alternative is the `map $http_upgrade $connection_upgrade { default upgrade; '' close; }` block in the http section paired with `proxy_set_header Connection $connection_upgrade;` inside `location /`. Both approaches work; the `$http_connection` form is what Nginx Proxy Manager uses internally and needs no http-block changes.
+
+The WebSocket configuration is important for real-time features in Speakr. The timeout settings ensure large file uploads don't get interrupted. You can obtain free SSL certificates from Let's Encrypt using Certbot, making HTTPS accessible for everyone.
+
+#### Nginx Proxy Manager
+
+Nginx Proxy Manager handles the WebSocket-upgrade pattern correctly in its default templates (it uses `proxy_set_header Connection $http_connection` in each generated proxy host), so a vanilla NPM proxy host pointed at `http://<speakr-host>:8899` typically works without any custom nginx tuning. Three notes worth knowing:
+
+- NPM bakes `client_max_body_size 2000m` into its main `nginx.conf`, so every proxy host inherits a 2 GB default unless you override it. Plenty for normal Speakr uploads. If you need higher (or unlimited), put `client_max_body_size 0;` in the **Advanced** tab on the Speakr proxy host.
+- Anything pasted into a proxy host's Advanced tab is rendered into the per-host `.conf` file under `/data/nginx/proxy_host/`. Use this for per-host tweaks like `proxy_request_buffering off;` on a constrained proxy host.
+- Global tweaks across every host go into the files under `/data/nginx/custom/`: `http_top.conf` for the http block, `server_proxy.conf` for directives inside every proxy host's server block. Useful for headers and rate limiting that should apply everywhere.
+
+If you prefer Apache, here's an equivalent configuration:
+
+```apache
+<VirtualHost *:443>
+    ServerName speakr.yourdomain.com
+
+    SSLEngine on
+    SSLCertificateFile /path/to/certificate.pem
+    SSLCertificateKeyFile /path/to/private.key
+
+    # Security Headers
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+
+    # Proxy settings
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # Handle WebSockets for real-time features
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/?(.*) "ws://localhost:8899/$1" [P,L]
+
+    <Location />
+        ProxyPass http://localhost:8899/
+        ProxyPassReverse http://localhost:8899/
+        RequestHeader set "X-Forwarded-Proto" expr=%{REQUEST_SCHEME}
+    </Location>
+
+    # Timeout for large uploads
+    ProxyTimeout 300
+</VirtualHost>
+
+<VirtualHost *:80>
+    ServerName speakr.yourdomain.com
+
+    # Redirect to HTTPS
+    RewriteEngine On
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [END,NE,R=permanent]
+</VirtualHost>
+```
+
+Apache requires these modules: `sudo a2enmod ssl proxy proxy_http proxy_wstunnel rewrite headers`
+
+### Backup Strategy
+
+Regular backups are essential for production deployments. Your Speakr data consists of three critical components that need backing up: the SQLite database in the `instance` directory, the audio files in the `uploads` directory (when using local storage), and your configuration in the `.env` file. If you use S3 storage, audio files are managed by your S3 provider's durability guarantees and do not need to be included in local backups.
+
+Create a backup script that captures all three components:
+
+```bash
+#!/bin/bash
+BACKUP_DIR="/backup/speakr"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Create backup directory if it doesn't exist
+mkdir -p "$BACKUP_DIR"
+
+# Create the backup
+tar czf "$BACKUP_DIR/speakr_backup_$DATE.tar.gz" \
+    /opt/speakr/instance \
+    /opt/speakr/uploads \
+    /opt/speakr/.env
+
+# Optional: Keep only last 30 days of backups
+find "$BACKUP_DIR" -name "speakr_backup_*.tar.gz" -mtime +30 -delete
+
+echo "Backup completed: speakr_backup_$DATE.tar.gz"
+```
+
+Make the script executable and schedule it with cron for automated daily backups:
+
+```bash
+chmod +x /opt/speakr/backup.sh
+crontab -e
+# Add this line for daily backups at 2 AM:
+0 2 * * * /opt/speakr/backup.sh
+```
+
+For critical deployments, consider copying backups to remote storage or cloud services for additional redundancy. The compressed backup size is typically much smaller than the original data, as audio files compress well.
+
+### Monitoring and Maintenance
+
+Proactive monitoring helps prevent issues before they impact users. Audio files can consume significant storage over time, especially if you're recording long meetings regularly. Set up disk space monitoring with alerts when usage exceeds 80%. A simple monitoring approach uses cron with df:
+
+```bash
+#!/bin/bash
+USAGE=$(df /opt/speakr | tail -1 | awk '{print $5}' | sed 's/%//')
+if [ $USAGE -gt 80 ]; then
+    echo "Warning: Speakr disk usage is at ${USAGE}%" | mail -s "Speakr Disk Alert" admin@example.com
+fi
+```
+
+Monitor the Docker container health and logs regularly. You can use Docker's built-in health check feature or external monitoring tools. Check for patterns like repeated API failures, authentication errors, or processing timeouts. Also track your API usage and costs with your transcription service provider, as costs can add up with heavy usage.
+
+### Security Hardening
+
+Production deployments require additional security measures beyond the default configuration. Start by ensuring strong passwords for all accounts, especially the admin account. Never use default or simple passwords in production.
+
+Restrict network access using firewall rules. If Speakr is only used internally, limit access to your organization's IP ranges:
+
+```bash
+# Example using ufw
+ufw allow from 192.168.1.0/24 to any port 8899
+ufw deny 8899
+```
+
+Implement rate limiting at the reverse proxy level to prevent abuse and API exhaustion. In nginx, you can add:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=speakr:10m rate=10r/s;
+limit_req zone=speakr burst=20;
+```
+
+Keep the Docker image updated with the latest security patches. Check for updates regularly and plan maintenance windows for updates. Always backup before updating, and test updates in a staging environment first if possible.
+
+## Updating Speakr
+
+Keeping Speakr updated ensures you have the latest features and security patches. The update process is straightforward but should be done carefully to avoid data loss.
+
+First, always create a backup before updating:
+
+```bash
+# Create a backup
+tar czf speakr_backup_before_update.tar.gz uploads/ instance/ .env
+
+# Pull the latest image
+docker compose pull
+
+# Stop the current container
+docker compose down
+
+# Start with the new image
+docker compose up -d
+
+# Check the logs to ensure successful startup
+docker compose logs -f app
+```
+
+The update process preserves all your data since it's stored in mounted volumes outside the container. However, checking the release notes is important as some updates might require configuration changes or have breaking changes that need attention.
+
+If an update causes issues, you can rollback by specifying the previous version in your docker-compose.yml file:
+
+```yaml
+image: learnedmachine/speakr:v1.2.3  # Replace with your previous version
+```
+
+## Troubleshooting Common Issues
+
+### Container Won't Start
+
+When the container fails to start, the logs usually tell you exactly what's wrong. Check them first:
+
+```bash
+docker compose logs app
+```
+
+Common startup issues include missing or malformed `.env` files. Ensure your `.env` file exists and has proper syntax. Each line should be `KEY=value` with no spaces around the equals sign. Comments start with `#`.
+
+Port conflicts are another common issue. Check if port 8899 is already in use:
+
+```bash
+netstat -tulpn | grep 8899
+# Or on macOS:
+lsof -i :8899
+```
+
+If the port is in use, either stop the conflicting service or change Speakr's port in docker-compose.yml.
+
+### Transcription Failures
+
+Transcription failures usually stem from API configuration issues. Check the Docker logs for specific error messages:
+
+```bash
+docker compose logs app | grep -i error
+```
+
+Common transcription issues include incorrect API keys, which show as authentication errors in the logs. Double-check your keys in the `.env` file and ensure they're for the correct service. Insufficient API credits will show as quota or payment errors. Check your account balance with your API provider. Network connectivity issues appear as connection timeouts or DNS resolution failures.
+
+For ASR endpoints, verify the service is running and accessible:
+
+```bash
+# Test ASR endpoint connectivity
+curl http://your-asr-service:9000/docs
+```
+
+If using Docker networking with service names, remember that containers must be on the same network to communicate.
+
+### Performance Issues
+
+Slow performance can have multiple causes. Start by checking system resources:
+
+```bash
+# Check memory usage
+free -h
+
+# Check disk I/O
+iotop
+
+# Check Docker resource usage
+docker stats speakr
+```
+
+If memory is constrained, consider adding swap space or upgrading your server. For disk I/O issues, ensure you're using SSD storage for the uploads and instance directories. Traditional hard drives can significantly slow down operations, especially with multiple concurrent users.
+
+For large file processing, ensure chunking is properly configured. Without chunking, large files might timeout or fail completely. The chunk size should be slightly below your API's limit to account for encoding overhead.
+
+If you're seeing slow transcription with many concurrent users, you might be hitting API rate limits. Check your API provider's documentation for rate limits and consider upgrading your plan if needed.
+
+### Browser Recording Issues
+
+If browser recording isn't working, especially system audio, the most common cause is using HTTP instead of HTTPS. Browsers require secure connections for audio capture due to privacy concerns. Either set up SSL with a reverse proxy or, for local development only, modify your browser's security settings to treat your local URL as secure.
+
+In Chrome, navigate to `chrome://flags`, search for "insecure origins", and add your URL to the list. Remember this reduces security and should only be used for development.
+
+## Building from Source
+
+If you need to modify Speakr's code or prefer building your own images, you can build from source. This requires cloning the repository and using Docker's build capability.
+
+First, clone the repository and navigate to it:
+
+```bash
+git clone https://github.com/murtaza-nasir/speakr.git
+cd speakr
+```
+
+Modify the docker-compose.yml to build locally instead of using the pre-built image:
+
+```yaml
+services:
+  app:
+    build:
+      context: .
+      args:
+        LIGHTWEIGHT: 0  # Set to 1 for a smaller image without PyTorch
+    image: speakr:custom  # Tag for your custom build
+    container_name: speakr
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/data/uploads
+      - ./instance:/data/instance
+```
+
+Build and start your custom version:
+
+```bash
+docker compose up -d --build
+```
+
+To build a lightweight image without PyTorch directly:
+
+```bash
+docker build --build-arg LIGHTWEIGHT=1 -t speakr:lite .
+```
+
+The `--build` flag forces Docker to rebuild the image even if one exists. This is useful when you've made code changes and want to test them.
+
+## Performance Optimization
+
+For high-volume deployments or when processing many large files, optimization becomes important. Start with model selection if using ASR. For English-only content, the `distil-large-v3` model offers an excellent balance of speed and accuracy. For multilingual content, use `large-v3-turbo` which performs well across languages while being faster and using less memory than the full `large-v3` model.
+
+Optimize Docker resource allocation for your workload:
+
+```yaml
+services:
+  app:
+    image: learnedmachine/speakr:latest
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4'
+        reservations:
+          memory: 4G
+          cpus: '2'
+```
+
+This ensures Speakr has enough resources while preventing it from consuming everything on shared servers.
+
+For storage performance, use SSD drives for the Docker volumes. The database benefits significantly from fast random I/O, and large audio file processing is much faster with SSDs. If using network storage, ensure low latency connections.
+
+---
+
+Next: [User Guide](../user-guide/index.md) to learn how to use all of Speakr's features

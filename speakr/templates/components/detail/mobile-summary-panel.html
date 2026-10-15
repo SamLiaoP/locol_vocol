@@ -1,0 +1,65 @@
+<!-- Mobile Summary Panel.
+
+     Two modes:
+     (1) READING: small action toolbar (copy / download / edit) above
+         the prose. Toolbar hides when editing so the "edit pen
+         highlights when active" inconsistency from before is gone —
+         in edit mode there's no panel toolbar at all, only the
+         editor's own toolbar + a sticky Cancel/Save footer.
+     (2) EDITING: editor fills the panel edge-to-edge with minimal
+         outer padding so the typing area is as large as possible;
+         Cancel and Save live in a sticky footer below the editor. -->
+<!-- Per-tab contextual toolbar moved into mobile-header.html so it
+     shares the chevron row instead of taking a separate row here. -->
+<div v-if="mobileTab === 'summary'" class="h-full flex flex-col">
+
+    <!-- Editing-mode shell — editor goes edge-to-edge (no horizontal
+         padding) since the surrounding mobile content area no longer
+         wraps it in p-4. Tiny pt-1 keeps the editor toolbar from
+         touching the header's bottom border. -->
+    <div v-if="editingSummary" class="flex-grow flex flex-col min-h-0 pt-1">
+        <div class="markdown-editor-container flex-1 min-h-0 flex flex-col">
+            <textarea ref="summaryMarkdownEditor"
+                      v-model="selectedRecording.summary"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 flex-shrink-0 px-3 py-2 border-t"
+             style="border-top-color: var(--border-secondary);">
+            <button @click="cancelEditSummary" class="btn btn--sm btn--ghost" v-text="t('common.cancel')"></button>
+            <button @click="saveEditSummary" class="btn btn--sm btn--primary" v-text="t('common.save')"></button>
+        </div>
+    </div>
+
+    <!-- Reading-mode body — px-3 only for prose readability against
+         the screen edge; py-3 keeps the prose off the toolbar above. -->
+    <div v-else class="flex-grow overflow-y-auto px-3 py-3">
+        <div>
+            <div v-if="selectedRecording.status === 'SUMMARIZING'" class="empty">
+                <div class="spinner spinner--lg"></div>
+                <div class="empty__title" v-text="t('help.generatingSummary')"></div>
+            </div>
+            <div v-else-if="!selectedRecording.summary" class="empty">
+                <div class="empty__icon"><i class="fas fa-file-alt"></i></div>
+                <div class="empty__title" v-text="t('summary.noSummary')"></div>
+                <div v-if="processedTranscription.isError" class="banner banner--warn">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Cannot generate summary: transcription failed</span>
+                </div>
+                <div class="flex items-center gap-2" style="margin-top: var(--sp-3);">
+                    <button class="btn btn--primary"
+                            @click="generateSummary()"
+                            :disabled="processedTranscription.isError">
+                        <i class="fas fa-magic"></i>
+                        <span>Generate Summary</span>
+                    </button>
+                    <button v-if="!processedTranscription.isError"
+                            class="btn btn--ghost btn--icon"
+                            @click="openCustomizeSummaryModal"
+                            title="Customise prompt">
+                        <i class="fas fa-sliders-h"></i>
+                    </button>
+                </div>
+            </div>
+            <div v-else class="prose-flush h-full" v-html="selectedRecording.summary_html || selectedRecording.summary"></div>
+        </div>
+    </div>
+</div>

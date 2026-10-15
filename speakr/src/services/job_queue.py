@@ -1,0 +1,943 @@
+"""
+Fair database-backed job queue for background processing tasks.
+
+This queue ensures:
+- Jobs persist across application restarts
+- Fair round-robin scheduling between users
+- Separate queues for transcription (slow) and summary (fast) jobs
+- Limited concurrency to prevent overwhelming external services
+- Automatic recovery of orphaned jobs
+"""
+
+import os
+import json
+import threading
+import time
+import logging
+from datetime import datetime
+from typing import Optional, Dict, Any, List
+from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
+
+# Configuration
+TRANSCRIPTION_WORKERS = int(os.environ.get('JOB_QUEUE_WORKERS', '2'))
+SUMMARY_WORKERS = int(os.environ.get('SUMMARY_QUEUE_WORKERS', '2'))
+MAX_RETRIES = int(os.environ.get('JOB_MAX_RETRIES', '3'))
+POLL_INTERVAL = 1.0  # seconds between checking for new jobs
+
+# Job type categories.
+#
+# 'stitch' (server-side recording-session assembly, #287 c/d) lives in the
+# transcription category on purpose: it is the local ffmpeg concat step that
+# gates the recording's transcription, and putting it here means the existing
+# transcription workers claim it, get_queue_status counts it, and
+# get_position_in_queue places it — no separate worker pool or queue needed.
+# Every consumer routes via "SUMMARY_JOBS if ... else TRANSCRIPTION_JOBS", so
+# membership in this list is the single source of truth for the whole pipeline.
+TRANSCRIPTION_JOBS = ['transcribe', 'reprocess_transcription', 'stitch', 'merge']
+SUMMARY_JOBS = ['summarize', 'reprocess_summary']
+
+
+class FairJobQueue:
+    """
+    A database-backed job queue with fair scheduling across users.
+
+    Uses separate queues for transcription and summary jobs to prevent
+    slow transcription jobs from blocking fast summary jobs.
+    """
+
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        """Singleton pattern to ensure only one queue exists."""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        """Initialize the job queue."""
+        if self._initialized:
+            return
+
+        self._transcription_workers = []
+        self._summary_workers = []
+        self._running = False
+        self._app = None
+        # Separate round-robin tracking for each queue
+        self._last_user_id_transcription = None
+        self._last_user_id_summary = None
+        # Lock for claiming jobs (SQLite doesn't support row-level locking)
+        self._claim_lock = threading.Lock()
+        # Whether this process won the queue-owner election (see startup.initialize_job_queue)
+        self._is_owner = False
+        self._initialized = True
+
+        logger.info(f"FairJobQueue initialized: {TRANSCRIPTION_WORKERS} transcription workers, {SUMMARY_WORKERS} summary workers")
+
+    def init_app(self, app):
+        """Initialize with Flask app for context management."""
+        self._app = app
+
+    @contextmanager
+    def _app_context(self):
+        """Get application context for database operations."""
+        if self._app:
+            with self._app.app_context():
+                yield
+        else:
+            yield
+
+    def mark_as_owner(self):
+        """Mark this process as the elected owner of the queue."""
+        self._is_owner = True
+
+    def start(self):
+        """Start the worker threads for both queues."""
+        if self._running:
+            return
+
+        # Only the elected owner runs workers; this also covers the auto-start in enqueue()
+        if not self._is_owner:
+            logger.debug(
+                "Not the job queue owner; no worker threads started in this process"
+            )
+            return
+
+        self._running = True
+
+        # Start transcription workers
+        for i in range(TRANSCRIPTION_WORKERS):
+            worker = threading.Thread(
+                target=self._worker_loop,
+                args=(TRANSCRIPTION_JOBS, 'transcription'),
+                name=f"TranscriptionWorker-{i}",
+                daemon=True
+            )
+            worker.start()
+            self._transcription_workers.append(worker)
+
+        # Start summary workers
+        for i in range(SUMMARY_WORKERS):
+            worker = threading.Thread(
+                target=self._worker_loop,
+                args=(SUMMARY_JOBS, 'summary'),
+                name=f"SummaryWorker-{i}",
+                daemon=True
+            )
+            worker.start()
+            self._summary_workers.append(worker)
+
+        logger.info(f"Started {TRANSCRIPTION_WORKERS} transcription workers and {SUMMARY_WORKERS} summary workers")
+
+    def stop(self):
+        """Stop the worker threads gracefully."""
+        self._running = False
+        for worker in self._transcription_workers + self._summary_workers:
+            worker.join(timeout=5)
+        self._transcription_workers.clear()
+        self._summary_workers.clear()
+        logger.info("Job queue workers stopped")
+
+    def _worker_loop(self, job_types: List[str], queue_name: str):
+        """Main worker loop that processes jobs of specific types."""
+        while self._running:
+            try:
+                job = self._claim_next_job(job_types, queue_name)
+                if job:
+                    self._process_job(job)
+                else:
+                    # No jobs available, sleep briefly
+                    time.sleep(POLL_INTERVAL)
+            except Exception as e:
+                logger.error(f"{queue_name.capitalize()} worker error: {e}", exc_info=True)
+                time.sleep(POLL_INTERVAL)
+
+    def _claim_next_job(self, job_types: List[str], queue_name: str):
+        """
+        Claim the next job of specified types using fair round-robin scheduling.
+
+        Args:
+            job_types: List of job types this worker handles
+            queue_name: Name of the queue ('transcription' or 'summary')
+
+        Returns the claimed job or None if no jobs available.
+        """
+        # Use lock to prevent race conditions (SQLite doesn't support row-level locking)
+        with self._claim_lock:
+            with self._app_context():
+                from src.database import db
+                from src.models import ProcessingJob
+
+                try:
+                    # Get list of users with queued jobs of our types
+                    users_with_jobs = db.session.query(
+                        ProcessingJob.user_id
+                    ).filter(
+                        ProcessingJob.status == 'queued',
+                        ProcessingJob.job_type.in_(job_types)
+                    ).group_by(
+                        ProcessingJob.user_id
+                    ).order_by(
+                        db.func.min(ProcessingJob.created_at)
+                    ).all()
+
+                    if not users_with_jobs:
+                        return None
+
+                    user_ids = [u[0] for u in users_with_jobs]
+
+                    # Get last user ID for this queue type
+                    last_user_id = (self._last_user_id_transcription
+                                   if queue_name == 'transcription'
+                                   else self._last_user_id_summary)
+
+                    # Round-robin: pick next user after last processed
+                    next_user_id = None
+                    if last_user_id is not None and last_user_id in user_ids:
+                        idx = user_ids.index(last_user_id)
+                        next_user_id = user_ids[(idx + 1) % len(user_ids)]
+                    else:
+                        next_user_id = user_ids[0]
+
+                    # Get oldest queued job of our types for this user
+                    candidate_job = ProcessingJob.query.filter(
+                        ProcessingJob.user_id == next_user_id,
+                        ProcessingJob.status == 'queued',
+                        ProcessingJob.job_type.in_(job_types)
+                    ).order_by(
+                        ProcessingJob.created_at
+                    ).first()
+
+                    if candidate_job:
+                        # Atomically claim the job - only succeeds if status is still 'queued'
+                        # This prevents race conditions when multiple workers try to claim the same job
+                        from sqlalchemy import update
+                        claim_time = datetime.utcnow()
+                        result = db.session.execute(
+                            update(ProcessingJob)
+                            .where(
+                                ProcessingJob.id == candidate_job.id,
+                                ProcessingJob.status == 'queued'  # Critical: only claim if still queued
+                            )
+                            .values(status='processing', started_at=claim_time)
+                        )
+
+                        if result.rowcount == 0:
+                            # Job was already claimed by another worker - this is expected with multiple workers
+                            logger.debug(f"[{queue_name.upper()}] Job {candidate_job.id} already claimed by another worker")
+                            db.session.rollback()
+                            return None
+
+                        # Also update Recording.status to reflect active processing
+                        from src.models import Recording
+                        recording = db.session.get(Recording, candidate_job.recording_id)
+                        if recording and recording.status == 'QUEUED':
+                            recording.status = 'PROCESSING'
+
+                        db.session.commit()
+
+                        # Refresh the job object to get updated values
+                        db.session.refresh(candidate_job)
+
+                        # Update last user ID for this queue
+                        if queue_name == 'transcription':
+                            self._last_user_id_transcription = next_user_id
+                        else:
+                            self._last_user_id_summary = next_user_id
+
+                        wait_time = (claim_time - candidate_job.created_at).total_seconds()
+                        logger.info(f"[{queue_name.upper()}] Claimed job {candidate_job.id} (type={candidate_job.job_type}) for user {candidate_job.user_id}, recording {candidate_job.recording_id} (waited {wait_time:.1f}s)")
+                        return candidate_job
+
+                    return None
+
+                except Exception as e:
+                    logger.error(f"Error claiming {queue_name} job: {e}", exc_info=True)
+                    db.session.rollback()
+                    return None
+
+    def _is_permanent_error(self, error_str: str) -> bool:
+        """
+        Detect if an error is permanent and should not be retried.
+
+        Permanent errors include:
+        - 400: Bad request (invalid format, invalid parameters)
+        - 413: File too large (user needs to enable chunking or compress file)
+        - 401/403: Authentication/authorization errors (credentials issue)
+        - 402: Payment required (billing issue)
+        - 404: Resource not found (model doesn't exist)
+        - Invalid format errors (file needs to be converted)
+        """
+        error_lower = error_str.lower()
+
+        # HTTP status codes that indicate permanent errors
+        permanent_codes = ['400', '413', '401', '402', '403', '404']
+        for code in permanent_codes:
+            if f'error code: {code}' in error_lower or f'status {code}' in error_lower:
+                return True
+
+        # Specific error patterns that are permanent (simple substring matching)
+        permanent_patterns = [
+            'maximum content size limit',
+            'file too large',
+            'payload too large',
+            'invalid api key',
+            'incorrect api key',
+            'authentication failed',
+            'unauthorized',
+            'permission denied',
+            'access denied',
+            'billing',
+            'payment required',
+            'quota exceeded',
+            'insufficient funds',
+            'model not found',
+            'invalid model',
+            'unsupported format',
+            'invalid file format',
+            'invalid_request_error',
+            'bad request',
+            'unparseable',
+        ]
+
+        for pattern in permanent_patterns:
+            if pattern in error_lower:
+                return True
+
+        return False
+
+    def _process_job(self, job):
+        """Process a single job by dispatching to the appropriate task function."""
+        job_id = job.id
+        job_type = job.job_type
+        recording_id = job.recording_id
+        params_str = job.params
+        is_new_upload = job.is_new_upload
+
+        with self._app_context():
+            from src.database import db
+            from src.models import ProcessingJob, Recording
+            from flask import current_app
+
+            try:
+                # Parse job parameters
+                params = json.loads(params_str) if params_str else {}
+
+                # Re-fetch the job in this session context to ensure it's attached
+                job = db.session.get(ProcessingJob, job_id)
+                if not job:
+                    logger.error(f"Job {job_id} not found when trying to process")
+                    return
+
+                # Get recording
+                recording = db.session.get(Recording, recording_id)
+                if not recording:
+                    raise ValueError(f"Recording {recording_id} not found")
+
+                # Webhook fan-out for "started" events (#275) is now
+                # emitted INSIDE each job handler after the
+                # file-existence and recording-validity checks, so
+                # subscribers don't see misleading started→failed
+                # sequences when the audio file is missing on disk.
+                # (Previously fired here, immediately after claim.)
+
+                # Dispatch based on job type
+                if job_type == 'transcribe':
+                    self._run_transcription(job, recording, params)
+                elif job_type == 'summarize':
+                    self._run_summarization(job, recording, params)
+                elif job_type == 'reprocess_transcription':
+                    self._run_reprocess_transcription(job, recording, params)
+                elif job_type == 'reprocess_summary':
+                    self._run_reprocess_summary(job, recording, params)
+                elif job_type == 'stitch':
+                    self._run_stitch(job, recording, params)
+                elif job_type == 'merge':
+                    self._run_merge(job, recording, params)
+                else:
+                    raise ValueError(f"Unknown job type: {job_type}")
+
+                # Mark as completed - re-fetch to ensure we have latest state
+                job = db.session.get(ProcessingJob, job_id)
+                if job:
+                    job.status = 'completed'
+                    job.completed_at = datetime.utcnow()
+                    db.session.commit()
+                    logger.info(f"Job {job_id} completed successfully")
+
+                # Webhook fan-out (#275). One emit per job-type completion;
+                # subscribers map these to user-visible lifecycle events.
+                # Best-effort: if the webhook subsystem throws, the job is
+                # still marked completed.
+                try:
+                    self._emit_completion_webhook(job_type, recording_id)
+                except Exception as e:
+                    logger.warning(f"Webhook emit on job {job_id} completion failed: {e}")
+
+                # Email notification (#386), independent of webhooks so a user
+                # can have one without the other. Also best-effort: an SMTP
+                # server that is down must not fail a completed job.
+                try:
+                    self._emit_completion_email(job_type, recording_id)
+                except Exception as e:
+                    logger.warning(f"Completion email for job {job_id} failed: {e}")
+
+            except Exception as e:
+                error_str = str(e)
+                logger.error(f"Job {job_id} failed: {e}", exc_info=True)
+
+                # Check if this is a permanent error that shouldn't be retried
+                is_permanent_error = self._is_permanent_error(error_str)
+
+                # Re-fetch job to update it
+                job = db.session.get(ProcessingJob, job_id)
+                if job:
+                    job.error_message = error_str
+                    job.retry_count += 1
+
+                    # Only retry if: not a permanent error AND under retry limit
+                    if not is_permanent_error and job.retry_count < MAX_RETRIES:
+                        # Re-queue for retry
+                        job.status = 'queued'
+                        job.started_at = None
+                        logger.info(f"Job {job_id} re-queued for retry ({job.retry_count}/{MAX_RETRIES})")
+                    else:
+                        job.status = 'failed'
+                        job.completed_at = datetime.utcnow()
+                        recording = db.session.get(Recording, recording_id)
+
+                        if is_permanent_error:
+                            logger.info(f"Job {job_id} failed with permanent error (no retry): {error_str[:100]}")
+
+                        # Always keep recordings with FAILED status so users can see the error
+                        # and reprocess later (e.g., when ASR server recovers)
+                        if recording:
+                            # Keep the recording with FAILED status so user can see the error and fix settings
+                            recording.status = 'FAILED'
+                            # Format the error for nice display. A failed summary
+                            # job keeps the transcript and shows the error as the
+                            # summary; it used to overwrite a good transcript (#412).
+                            from src.utils.error_formatting import format_error_for_storage
+                            if job_type in ('summarize', 'reprocess_summary'):
+                                recording.summary = format_error_for_storage(error_str)
+                            else:
+                                recording.transcription = format_error_for_storage(error_str)
+
+                        if is_permanent_error:
+                            logger.error(f"Job {job_id} failed permanently (non-retryable error)")
+                        else:
+                            logger.error(f"Job {job_id} failed permanently after {MAX_RETRIES} retries")
+
+                        # Webhook fan-out for permanent failure (#275). The
+                        # retryable-failure case does not emit because the
+                        # subscriber will see the eventual success or
+                        # permanent failure that follows the retry loop.
+                        try:
+                            self._emit_failure_webhook(job_type, recording_id, error_str)
+                        except Exception as e:
+                            logger.warning(f"Webhook emit on job {job_id} failure failed: {e}")
+
+                        try:
+                            self._emit_failure_email(job_type, recording_id, error_str)
+                        except Exception as e:
+                            logger.warning(f"Failure email for job {job_id} failed: {e}")
+
+                    db.session.commit()
+
+    def _run_transcription(self, job, recording, params):
+        """Run transcription task. Status updates handled by task function."""
+        from src.tasks.processing import transcribe_audio_task
+        from flask import current_app
+        from src.services.storage import get_storage_service
+
+        storage = get_storage_service()
+        audio_path = (recording.audio_path or '').strip()
+        if not audio_path:
+            logger.error(f"Cannot run transcription job for recording {recording.id}: missing audio_path")
+            raise ValueError(f"Missing audio_path for recording {recording.id}")
+        with storage.materialize(audio_path) as materialized:
+            filepath = materialized.local_path
+            filename_for_asr = recording.original_filename or os.path.basename(filepath)
+
+            # Emit recording.transcription.started AFTER the file is on disk
+            # (materialized from storage) so subscribers don't see misleading
+            # started→failed events for jobs that abort immediately. Best-effort;
+            # emit errors don't block the actual work. Kept INSIDE the materialize
+            # block so the temp file still exists when transcription runs.
+            if filepath and os.path.exists(filepath):
+                try:
+                    self._emit_started_webhook('transcribe', recording.id)
+                except Exception as e:
+                    logger.warning(f"Webhook emit (transcribe started) failed: {e}")
+
+            transcribe_audio_task(
+                current_app._get_current_object().app_context(),
+                recording.id,
+                filepath,
+                filename_for_asr,
+                datetime.utcnow(),
+                language=params.get('language'),
+                min_speakers=params.get('min_speakers'),
+                max_speakers=params.get('max_speakers'),
+                tag_id=params.get('tag_id'),
+                hotwords=params.get('hotwords'),
+                initial_prompt=params.get('initial_prompt'),
+                transcription_model=params.get('transcription_model'),
+            )
+
+    def _run_summarization(self, job, recording, params):
+        """Run summarization-only task. Status updates handled by task function."""
+        from src.tasks.processing import generate_summary_only_task
+        from flask import current_app
+
+        generate_summary_only_task(
+            current_app._get_current_object().app_context(),
+            recording.id,
+            custom_prompt_override=params.get('custom_prompt'),
+            custom_prompt_append=params.get('custom_prompt_append', False),
+            user_id=params.get('user_id')
+        )
+
+    def _run_reprocess_transcription(self, job, recording, params):
+        """Run transcription reprocessing task. Status updates handled by task function."""
+        from src.tasks.processing import transcribe_audio_task
+        from flask import current_app
+        from src.services.storage import get_storage_service
+
+        storage = get_storage_service()
+        audio_path = (recording.audio_path or '').strip()
+        if not audio_path:
+            logger.error(f"Cannot run reprocess transcription job for recording {recording.id}: missing audio_path")
+            raise ValueError(f"Missing audio_path for recording {recording.id}")
+        with storage.materialize(audio_path) as materialized:
+            filepath = materialized.local_path
+            filename_for_asr = recording.original_filename or os.path.basename(filepath)
+
+            # Emit started AFTER file existence check (see _run_transcription).
+            # Kept INSIDE the materialize block so the temp file still exists.
+            if filepath and os.path.exists(filepath):
+                try:
+                    self._emit_started_webhook('reprocess_transcription', recording.id)
+                except Exception as e:
+                    logger.warning(f"Webhook emit (reprocess_transcription started) failed: {e}")
+
+            transcribe_audio_task(
+                current_app._get_current_object().app_context(),
+                recording.id,
+                filepath,
+                filename_for_asr,
+                datetime.utcnow(),
+                language=params.get('language'),
+                min_speakers=params.get('min_speakers'),
+                max_speakers=params.get('max_speakers'),
+                tag_id=params.get('tag_id'),
+                hotwords=params.get('hotwords'),
+                initial_prompt=params.get('initial_prompt'),
+                transcription_model=params.get('transcription_model'),
+            )
+
+    def _run_reprocess_summary(self, job, recording, params):
+        """Run summary reprocessing task. Status updates handled by task function."""
+        from src.tasks.processing import generate_summary_only_task
+        from flask import current_app
+
+        generate_summary_only_task(
+            current_app._get_current_object().app_context(),
+            recording.id,
+            custom_prompt_override=params.get('custom_prompt'),
+            custom_prompt_append=params.get('custom_prompt_append', False),
+            user_id=params.get('user_id')
+        )
+
+    def _run_stitch(self, job, recording, params):
+        """Stitch in-progress recording-session chunks into a single file (#287 c/d).
+
+        On success the recording row is updated in place (audio_path,
+        file_size, status='PENDING') and a follow-up ``transcribe`` job is
+        enqueued. On failure the recording is flipped to FAILED with the
+        ffmpeg error message visible to the user.
+        """
+        from src.services.recording_stitch import (
+            stitch_recording_session,
+            kickoff_transcription_for_stitched,
+            StitchError,
+        )
+
+        session_id = (params or {}).get('session_id')
+        if not session_id:
+            raise ValueError("stitch job missing required 'session_id' param")
+
+        try:
+            recording_id, final_path, metadata = stitch_recording_session(session_id)
+        except StitchError as e:
+            # Mark the recording FAILED so the user sees the error in the UI.
+            # The session row was already flipped to 'failed' by the worker,
+            # except in cases where stitch raised before touching it; do both
+            # defensively.
+            from src.models import RecordingSession
+            recording.status = 'FAILED'
+            recording.transcription = f"Processing failed: {e}"
+            sess = db.session.get(RecordingSession, session_id)
+            if sess and sess.status not in ('finalized', 'aborted', 'expired'):
+                sess.status = 'failed'
+                sess.error_message = str(e)
+            db.session.commit()
+            raise
+
+        kickoff_transcription_for_stitched(
+            recording_id=recording_id,
+            user_id=recording.user_id,
+            metadata=metadata,
+        )
+
+    def _run_merge(self, job, recording, params):
+        """Concatenate source recordings' audio into this recording (#323).
+
+        The heavy ffmpeg concat runs here, off the request path, so hours-long
+        merges do not time out the HTTP request. On success the recording's
+        audio_path is set and a follow-up ``transcribe`` job is enqueued; on
+        failure the recording is flipped to FAILED with the error visible.
+        """
+        from src.services.recording_merge import run_merge_job, MergeError
+
+        try:
+            run_merge_job(recording, params)
+        except MergeError as e:
+            recording.status = 'FAILED'
+            recording.error_message = str(e)
+            recording.transcription = f"Processing failed: {e}"
+            db.session.commit()
+            raise
+
+    def enqueue(
+        self,
+        user_id: int,
+        recording_id: int,
+        job_type: str,
+        params: Dict[str, Any] = None,
+        is_new_upload: bool = False
+    ) -> int:
+        """
+        Add a job to the database queue.
+
+        Args:
+            user_id: ID of the user who owns this job
+            recording_id: ID of the recording to process
+            job_type: Type of job (transcribe, summarize, reprocess_transcription, reprocess_summary)
+            params: Optional parameters for the job
+            is_new_upload: True if this is a new file upload (for cleanup on failure)
+
+        Returns:
+            The created job ID
+        """
+        with self._app_context():
+            from src.database import db
+            from src.models import ProcessingJob, Recording
+
+            # Check for existing active job of the SAME TYPE for this recording
+            # Allow different job types to coexist (e.g., transcribe and summarize)
+            existing = ProcessingJob.query.filter(
+                ProcessingJob.recording_id == recording_id,
+                ProcessingJob.job_type == job_type,
+                ProcessingJob.status.in_(['queued', 'processing'])
+            ).first()
+
+            if existing:
+                logger.warning(f"Job of type {job_type} already exists for recording {recording_id}: {existing.id}")
+                return existing.id
+
+            # Create new job
+            job = ProcessingJob(
+                user_id=user_id,
+                recording_id=recording_id,
+                job_type=job_type,
+                params=json.dumps(params) if params else None,
+                is_new_upload=is_new_upload
+            )
+            db.session.add(job)
+
+            # Update recording status based on job type
+            recording = db.session.get(Recording, recording_id)
+            if recording:
+                if job_type in SUMMARY_JOBS:
+                    recording.status = 'SUMMARIZING'
+                else:
+                    recording.status = 'QUEUED'
+
+            db.session.commit()
+
+            # Auto-start workers if not running (no-op unless this process owns the queue)
+            if not self._running:
+                self.start()
+
+            queue_name = 'summary' if job_type in SUMMARY_JOBS else 'transcription'
+            logger.info(f"Enqueued {queue_name} job {job.id} (type={job_type}) for user {user_id}, recording {recording_id}")
+            return job.id
+
+    def recover_orphaned_jobs(self):
+        """
+        Recover jobs that were processing when the app crashed.
+        Call this on startup to reset orphaned jobs back to queued.
+        """
+        with self._app_context():
+            from src.database import db
+            from src.models import ProcessingJob
+
+            orphaned = ProcessingJob.query.filter(
+                ProcessingJob.status == 'processing'
+            ).all()
+
+            for job in orphaned:
+                job.status = 'queued'
+                job.started_at = None
+                queue_name = 'summary' if job.job_type in SUMMARY_JOBS else 'transcription'
+                logger.info(f"Recovered orphaned {queue_name} job {job.id} for recording {job.recording_id}")
+
+            if orphaned:
+                db.session.commit()
+                logger.info(f"Recovered {len(orphaned)} orphaned jobs")
+
+    def get_queue_status(self) -> Dict[str, Any]:
+        """Get the current queue status for both queues."""
+        with self._app_context():
+            from src.models import ProcessingJob
+
+            transcription_queued = ProcessingJob.query.filter(
+                ProcessingJob.status == 'queued',
+                ProcessingJob.job_type.in_(TRANSCRIPTION_JOBS)
+            ).count()
+            transcription_processing = ProcessingJob.query.filter(
+                ProcessingJob.status == 'processing',
+                ProcessingJob.job_type.in_(TRANSCRIPTION_JOBS)
+            ).count()
+
+            summary_queued = ProcessingJob.query.filter(
+                ProcessingJob.status == 'queued',
+                ProcessingJob.job_type.in_(SUMMARY_JOBS)
+            ).count()
+            summary_processing = ProcessingJob.query.filter(
+                ProcessingJob.status == 'processing',
+                ProcessingJob.job_type.in_(SUMMARY_JOBS)
+            ).count()
+
+            return {
+                "transcription_queue": {
+                    "queued": transcription_queued,
+                    "processing": transcription_processing,
+                    "workers": TRANSCRIPTION_WORKERS
+                },
+                "summary_queue": {
+                    "queued": summary_queued,
+                    "processing": summary_processing,
+                    "workers": SUMMARY_WORKERS
+                },
+                "is_running": self._running
+            }
+
+    def get_position_in_queue(self, recording_id: int) -> Optional[int]:
+        """Get the position of a recording's job in its respective queue (1-indexed)."""
+        with self._app_context():
+            from src.models import ProcessingJob
+
+            job = ProcessingJob.query.filter(
+                ProcessingJob.recording_id == recording_id,
+                ProcessingJob.status == 'queued'
+            ).first()
+
+            if not job:
+                return None
+
+            # Determine which queue this job is in
+            job_types = SUMMARY_JOBS if job.job_type in SUMMARY_JOBS else TRANSCRIPTION_JOBS
+
+            # Count jobs of the same type created before this one
+            position = ProcessingJob.query.filter(
+                ProcessingJob.status == 'queued',
+                ProcessingJob.job_type.in_(job_types),
+                ProcessingJob.created_at < job.created_at
+            ).count() + 1
+
+            return position
+
+    def get_job_for_recording(self, recording_id: int):
+        """Get the active job for a recording."""
+        with self._app_context():
+            from src.models import ProcessingJob
+
+            return ProcessingJob.query.filter(
+                ProcessingJob.recording_id == recording_id,
+                ProcessingJob.status.in_(['queued', 'processing'])
+            ).first()
+
+    def cleanup_old_jobs(self, max_age_hours: int = 24):
+        """Remove completed/failed jobs older than max_age_hours."""
+        with self._app_context():
+            from src.database import db
+            from src.models import ProcessingJob
+            from datetime import timedelta
+
+            cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+
+            deleted = ProcessingJob.query.filter(
+                ProcessingJob.status.in_(['completed', 'failed']),
+                ProcessingJob.completed_at < cutoff
+            ).delete(synchronize_session=False)
+
+            if deleted:
+                db.session.commit()
+                logger.info(f"Cleaned up {deleted} old jobs")
+
+
+    # --- Webhook emission helpers (#275) ---------------------------------
+
+    # recording.summary.completed is emitted by the summary step itself
+    # (processing.generate_summary_only_task, #412): a summary job can end with
+    # a FAILED summary, and the first summary of an upload runs inside the
+    # transcribe job, so the job type alone cannot say whether a summary exists.
+    _COMPLETION_EVENT_MAP = {
+        'transcribe': 'recording.transcription.completed',
+        'reprocess_transcription': 'recording.transcription.completed',
+    }
+
+    _FAILURE_EVENT_MAP = {
+        'transcribe': 'recording.transcription.failed',
+        'summarize': 'recording.summary.failed',
+        'reprocess_transcription': 'recording.transcription.failed',
+        'reprocess_summary': 'recording.summary.failed',
+        # A permanent stitch failure means the recording will never reach
+        # transcription, so subscribers should hear about it under the
+        # transcription.failed event (the follow-up transcribe job that would
+        # normally emit this is never enqueued on a stitch failure, so there
+        # is no double-emit). Stitch deliberately has NO started/completed
+        # mapping: those fire from the real transcribe job after a successful
+        # stitch.
+        'stitch': 'recording.transcription.failed',
+    }
+
+    # No `summary.started` in the vocabulary today; if one is added later,
+    # extend this map and the dispatcher will pick it up automatically.
+    _STARTED_EVENT_MAP = {
+        'transcribe': 'recording.transcription.started',
+        'reprocess_transcription': 'recording.transcription.started',
+    }
+
+    def _emit_started_webhook(self, job_type: str, recording_id: int):
+        event_type = self._STARTED_EVENT_MAP.get(job_type)
+        if not event_type:
+            return
+        with self._app_context():
+            from src.database import db
+            from src.models import Recording
+            from src.services.webhook_dispatch import emit_webhook_event
+            recording = db.session.get(Recording, recording_id)
+            if not recording:
+                return
+            emit_webhook_event(
+                user_id=recording.user_id,
+                event_type=event_type,
+                data={
+                    'recording_id': recording.id,
+                    'title': recording.title,
+                },
+            )
+
+    def _emit_completion_webhook(self, job_type: str, recording_id: int):
+        event_type = self._COMPLETION_EVENT_MAP.get(job_type)
+        if not event_type:
+            return
+        with self._app_context():
+            from src.database import db
+            from src.models import Recording
+            from src.services.webhook_dispatch import emit_webhook_event
+            recording = db.session.get(Recording, recording_id)
+            if not recording:
+                return
+            # Both of these were documented from #275 and neither was ever
+            # sent. audio_duration_seconds read `recording.audio_duration`,
+            # which is not a column, and `language` read a per-recording
+            # language that did not exist either. getattr's default made both
+            # None and the None-filter below then dropped the keys.
+            #
+            # The language is now recorded at transcription time from what the
+            # service reports, so it describes this audio rather than the
+            # user's current preference. It stays absent for recordings
+            # transcribed before that column existed, and for backends that
+            # report no language.
+            data = {
+                'recording_id': recording.id,
+                'title': recording.title,
+                'language': recording.transcription_language,
+                'audio_duration_seconds': recording.audio_duration_seconds,
+                'transcription_duration_seconds': recording.transcription_duration_seconds,
+                'summarization_duration_seconds': recording.summarization_duration_seconds,
+            }
+            emit_webhook_event(
+                user_id=recording.user_id,
+                event_type=event_type,
+                data={k: v for k, v in data.items() if v is not None},
+            )
+
+    # Only transcription reaches the inbox. A summary finishing is not an
+    # event a user waits on the way they wait on a transcript, and mailing
+    # both would double the volume for no extra signal.
+    _EMAIL_JOB_TYPES = ('transcribe', 'reprocess_transcription')
+
+    def _load_recording_and_owner(self, recording_id: int):
+        from src.database import db
+        from src.models import Recording, User
+        recording = db.session.get(Recording, recording_id)
+        if not recording:
+            return None, None
+        return recording, db.session.get(User, recording.user_id)
+
+    def _emit_completion_email(self, job_type: str, recording_id: int):
+        if job_type not in self._EMAIL_JOB_TYPES:
+            return
+        with self._app_context():
+            from src.services.email import send_transcription_complete_email
+            recording, owner = self._load_recording_and_owner(recording_id)
+            if not recording or not owner:
+                return
+            if send_transcription_complete_email(owner, recording):
+                logger.info(f"Sent completion email for recording {recording_id} to user {owner.id}")
+
+    def _emit_failure_email(self, job_type: str, recording_id: int, error: str):
+        if job_type not in self._EMAIL_JOB_TYPES:
+            return
+        with self._app_context():
+            from src.services.email import send_transcription_failed_email
+            recording, owner = self._load_recording_and_owner(recording_id)
+            if not recording or not owner:
+                return
+            if send_transcription_failed_email(owner, recording, error):
+                logger.info(f"Sent failure email for recording {recording_id} to user {owner.id}")
+
+    def _emit_failure_webhook(self, job_type: str, recording_id: int, error: str):
+        event_type = self._FAILURE_EVENT_MAP.get(job_type)
+        if not event_type:
+            return
+        with self._app_context():
+            from src.database import db
+            from src.models import Recording
+            from src.services.webhook_dispatch import emit_webhook_event
+            recording = db.session.get(Recording, recording_id)
+            if not recording:
+                return
+            emit_webhook_event(
+                user_id=recording.user_id,
+                event_type=event_type,
+                data={
+                    'recording_id': recording.id,
+                    'title': recording.title,
+                    'error': (error or '')[:500],
+                },
+            )
+
+
+# Global job queue instance
+job_queue = FairJobQueue()

@@ -1,0 +1,730 @@
+<!-- Upload View — rendered as a modal (overlay + panel) instead of the
+     previous full-screen takeover. The Vue gate is currentView ==='upload'
+     so the existing switchToUploadView entrypoints stay unchanged; closing
+     the modal calls closeUploadView() which restores currentView to either
+     'detail' (if a recording is open behind it) or null (drops back to
+     the empty/list view). Backdrop-click and Esc both dismiss. -->
+<div v-if="showUploadModal"
+     @click.self="closeUploadView"
+     @keydown.esc="closeUploadView"
+     tabindex="-1"
+     class="modal-overlay">
+    <div class="modal-panel modal-panel--lg modal-panel--bottom-sheet"
+         :style="[{ maxHeight: '92vh' }, bottomSheetDragStyle]">
+        <!-- Drag-to-dismiss handlers attached on the header area only
+             (and on the panel's ::before drag handle, which lives inside
+             this header's expanded top padding) — keeps the scrollable
+             modal-body free for normal touch-scrolling without
+             swallowing the gesture. -->
+        <div class="modal-header"
+             @touchstart.passive="onSheetDragStart"
+             @touchmove.passive="onSheetDragMove"
+             @touchend.passive="onSheetDragEnd"
+             @touchcancel.passive="onSheetDragEnd">
+            <i class="fas fa-microphone text-[var(--text-accent)]"></i>
+            <h3 class="modal-title" v-text="t('upload.title')"></h3>
+            <button @click="closeUploadView" class="modal-close" :title="t('buttons.close')">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <!-- File Upload Area -->
+            <div @drop="handleDrop" @dragover="handleDragOver" @dragleave="handleDragLeave" @click="$refs.fileInput.click()"
+                 :class="['border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-300', dragover ? 'border-[var(--border-accent)] bg-[var(--bg-accent)]' : 'border-[var(--border-secondary)] hover:border-[var(--border-accent)]']">
+                <i class="fas fa-cloud-upload-alt text-2xl text-[var(--text-muted)] mb-2"></i>
+                <p class="text-sm text-[var(--text-secondary)] mb-1" v-text="t('upload.dropzone')"></p>
+                <p class="text-xs text-[var(--text-muted)]" v-text="t('upload.supportedFormats')"></p>
+            </div>
+            <input ref="fileInput" type="file" @change="handleFileSelect" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.ogg,.flac,.wma,.aiff,.opus,.caf,.3gp,.3gpp,.amr,.mp4,.mov,.webm,.mkv,.avi,.m4v,.ts,.mts,.wmv,.flv,.mpeg,.mpg,.ogv,.vob,.asf" multiple class="hidden">
+
+            <!-- Queued Files Display -->
+            <div v-if="pendingQueueFiles.length > 0" class="mt-3">
+                <div class="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                    <h4 class="text-xs font-medium text-[var(--text-secondary)]">
+                        <i class="fas fa-list mr-1"></i>
+                        ${ t('upload.filesToUpload') } (${pendingQueueFiles.length})
+                    </h4>
+                    <!-- Join switch: shown once two or more files are queued.
+                         Separate recordings is the default. -->
+                    <div v-if="joinAvailable" class="inline-flex rounded-md border border-[var(--border-secondary)] overflow-hidden text-[11px]"
+                         role="radiogroup" :aria-label="t('upload.joinModeLabel')">
+                        <button type="button" role="radio" :aria-checked="!joinActive"
+                                @click="setJoinMode(false)"
+                                :class="['px-2 py-1 transition-colors', !joinActive ? 'bg-[var(--bg-accent)] text-[var(--text-accent)] font-medium' : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]']">
+                            <i class="fas fa-clone mr-1"></i><span v-text="t('upload.joinSeparate')"></span>
+                        </button>
+                        <button type="button" role="radio" :aria-checked="joinActive"
+                                @click="setJoinMode(true)"
+                                :class="['px-2 py-1 border-l border-[var(--border-secondary)] transition-colors', joinActive ? 'bg-[var(--bg-accent)] text-[var(--text-accent)] font-medium' : 'text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]']">
+                            <i class="fas fa-object-group mr-1"></i><span v-text="t('upload.joinOne')"></span>
+                        </button>
+                    </div>
+                </div>
+                <div :class="['space-y-1 overflow-y-auto', joinActive ? 'max-h-56' : 'max-h-32']">
+                    <div v-for="(item, index) in pendingQueueFiles" :key="item.clientId"
+                         :draggable="joinActive"
+                         @dragstart="joinActive && handleJoinDragStart(item.clientId, $event)"
+                         @dragover.prevent
+                         @drop.prevent="joinActive && handleJoinDrop(index)"
+                         @dragend="handleJoinDragEnd"
+                         :class="['flex flex-col gap-0.5 px-2 py-1.5 bg-[var(--bg-tertiary)] rounded border border-[var(--border-secondary)]',
+                                  joinActive && joinDragClientId === item.clientId ? 'opacity-50' : '']">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                <template v-if="joinActive">
+                                    <i class="fas fa-grip-vertical text-[10px] text-[var(--text-muted)] cursor-grab flex-shrink-0" aria-hidden="true"></i>
+                                    <span class="text-[10px] font-semibold text-[var(--text-accent)] w-4 text-right flex-shrink-0" v-text="index + 1"></span>
+                                </template>
+                                <!-- File-type icon: video files get a
+                                     video glyph so users instantly see
+                                     which queue items are video at a
+                                     glance (relevant for the audio-
+                                     only / video-retention toggles). -->
+                                <i :class="[
+                                       'text-xs flex-shrink-0',
+                                       /\.(mp4|mov|mkv|avi|webm|m4v|wmv|flv|ts|mts|mpeg|mpg|ogv|vob|asf)$/i.test(item.file.name)
+                                         ? 'fas fa-file-video text-sky-500'
+                                         : 'fas fa-file-audio text-[var(--text-muted)]'
+                                   ]"></i>
+                                <span class="text-xs text-[var(--text-primary)] truncate" v-text="item.file.name"></span>
+                                <!-- Size + duration. Duration is
+                                     populated asynchronously by the
+                                     computeFileDuration probe in
+                                     upload.js; while null we just show
+                                     size. -->
+                                <span class="text-[10px] text-[var(--text-muted)] flex-shrink-0">
+                                    (${ formatFileSize(item.file.size) }<span v-if="item.duration">, ${ formatDuration(item.duration) }</span>)
+                                </span>
+                            </div>
+                            <template v-if="joinActive">
+                                <button type="button" @click="moveJoinItem(item.clientId, -1)" :disabled="index === 0"
+                                        class="ml-1 p-0.5 text-[var(--text-muted)] hover:text-[var(--text-accent)] disabled:opacity-30 transition-colors flex-shrink-0"
+                                        :title="t('upload.joinMoveUp')" :aria-label="t('upload.joinMoveUp')">
+                                    <i class="fas fa-arrow-up text-[10px]"></i>
+                                </button>
+                                <button type="button" @click="moveJoinItem(item.clientId, 1)" :disabled="index === pendingQueueFiles.length - 1"
+                                        class="p-0.5 text-[var(--text-muted)] hover:text-[var(--text-accent)] disabled:opacity-30 transition-colors flex-shrink-0"
+                                        :title="t('upload.joinMoveDown')" :aria-label="t('upload.joinMoveDown')">
+                                    <i class="fas fa-arrow-down text-[10px]"></i>
+                                </button>
+                            </template>
+                            <button @click="removeFromQueue(item.clientId)"
+                                    class="ml-1.5 p-0.5 text-[var(--text-muted)] hover:text-red-500 transition-colors flex-shrink-0"
+                                    title="Remove from queue">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
+                        </div>
+                        <!-- Inline hint when VIDEO_RETENTION is off at the
+                             server. Shows on each video file so users
+                             aren't surprised the video stream is dropped
+                             and that the larger size limit applies.
+                             Styling: same icon size (text-xs) and gap
+                             (gap-1.5) as the file row above; pl-5 aligns
+                             the icon roughly under the file-icon column;
+                             mt-0.5 gives the row breathing room. -->
+                        <div v-if="!videoRetentionEnabled && /\.(mp4|mov|mkv|avi|webm|m4v|wmv|flv|ts|mts)$/i.test(item.file.name)"
+                             class="flex items-start gap-1.5 pl-5 mt-0.5 text-[11px] leading-snug text-sky-700 dark:text-sky-400">
+                            <i class="fas fa-video-slash text-xs mt-0.5 flex-shrink-0"></i>
+                            <span>${ t('upload.videoAudioOnlyAuto') }</span>
+                        </div>
+                        <!-- Informational hint for video files larger
+                             than the regular stored-file limit. The
+                             upload will still succeed (video files use
+                             the larger video cap), but processing may
+                             take longer and depends on chunking being
+                             on if the extracted audio also exceeds the
+                             regular limit. -->
+                        <div v-if="/\.(mp4|mov|mkv|avi|webm|m4v|wmv|flv|ts|mts)$/i.test(item.file.name)
+                                   && item.file.size > maxFileSizeMB * 1024 * 1024"
+                             class="flex items-start gap-1.5 pl-5 mt-0.5 text-[11px] leading-snug text-sky-700 dark:text-sky-400">
+                            <i class="fas fa-info-circle text-xs mt-0.5 flex-shrink-0"></i>
+                            <span>${ t('upload.largeVideoNotice') }</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Join summary: order, total length, title of the joined recording -->
+                <div v-if="joinActive" class="mt-2 space-y-1.5">
+                    <p class="text-[11px] text-[var(--text-muted)]">
+                        <i class="fas fa-object-group mr-1"></i>
+                        <span v-if="joinTotalDuration" v-text="t('upload.joinSummary', { count: pendingQueueFiles.length, duration: formatDuration(joinTotalDuration) })"></span>
+                        <span v-else v-text="t('upload.joinSummaryNoDuration', { count: pendingQueueFiles.length })"></span>
+                    </p>
+                    <label class="block">
+                        <span class="text-[11px] font-medium text-[var(--text-secondary)]" v-text="t('upload.joinTitle')"></span>
+                        <input type="text" v-model="joinTitle" maxlength="200"
+                               :placeholder="t('upload.joinTitlePlaceholder')"
+                               class="mt-0.5 w-full px-2 py-1 text-xs rounded border border-[var(--border-secondary)] bg-[var(--bg-input)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--ring-focus)]">
+                    </label>
+                    <p v-if="joinHasVideo" class="flex items-start gap-1.5 text-[11px] leading-snug text-sky-700 dark:text-sky-400">
+                        <i class="fas fa-video-slash text-xs mt-0.5 flex-shrink-0"></i>
+                        <span v-text="t('upload.joinVideoHint')"></span>
+                    </p>
+                </div>
+
+                <!-- Incognito Mode Toggle (only shown if feature is enabled via ENABLE_INCOGNITO_MODE env var) -->
+                <div v-if="enableIncognitoMode" class="mt-3">
+                    <button @click="incognitoMode = !incognitoMode"
+                            :class="[
+                                'w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all duration-200',
+                                incognitoMode
+                                    ? 'bg-gradient-to-r from-violet-500/10 to-purple-500/10 border-violet-400/50 dark:border-violet-500/50'
+                                    : 'bg-[var(--bg-tertiary)] border-[var(--border-secondary)] hover:border-[var(--border-focus)]'
+                            ]">
+                        <div class="flex items-center gap-3">
+                            <div :class="[
+                                'w-8 h-8 rounded-full flex items-center justify-center transition-all',
+                                incognitoMode
+                                    ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white'
+                                    : 'bg-[var(--bg-secondary)] text-[var(--text-muted)]'
+                            ]">
+                                <i class="fas fa-user-secret text-sm"></i>
+                            </div>
+                            <div class="text-left">
+                                <span :class="['text-sm font-medium', incognitoMode ? 'text-violet-700 dark:text-violet-300' : 'text-[var(--text-secondary)]']">
+                                    ${ t('incognito.mode') }
+                                </span>
+                                <p v-if="!incognitoMode" class="text-[10px] text-[var(--text-muted)]">
+                                    ${ t('incognito.processWithoutSaving') }
+                                </p>
+                                <p v-else class="text-[10px] text-violet-600 dark:text-violet-400">
+                                    ${ t('incognito.sessionOnly') } &bull; ${ t('incognito.notSavedToAccount') }
+                                </p>
+                            </div>
+                        </div>
+                        <div :class="[
+                            'w-10 h-5 rounded-full relative transition-all duration-200',
+                            incognitoMode ? 'bg-gradient-to-r from-violet-500 to-purple-500' : 'bg-[var(--bg-secondary)]'
+                        ]">
+                            <div :class="[
+                                'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200',
+                                incognitoMode ? 'left-5' : 'left-0.5'
+                            ]"></div>
+                        </div>
+                    </button>
+                </div>
+
+                <!-- Keep audio only toggle. Shown only when VIDEO_RETENTION
+                     is enabled at the server AND the queue contains at
+                     least one video file. When off, videos in the queue
+                     get the larger audio-only size limit automatically
+                     (the hint on each video row makes that visible).
+                     Palette: sky-blue, matching the fa-file-video glyph
+                     on the video file rows above, so the toggle reads
+                     as "the thing that acts on those blue file rows"
+                     at a glance. Icon is fa-video-slash so the action
+                     ("drop the video stream") is visible without
+                     reading the label. -->
+                <div v-if="videoRetentionEnabled && uploadQueue.some(item => item.file && /\.(mp4|mov|mkv|avi|webm|m4v|wmv|flv|ts|mts)$/i.test(item.file.name))"
+                     class="mt-3">
+                    <!-- Off-state keeps a soft sky tint on the icon
+                         badge so the colour link to the sky-blue
+                         video-file rows is visible BEFORE the user
+                         clicks the toggle; the toggle just intensifies
+                         the same hue when activated rather than
+                         introducing a new colour. Left-border accent
+                         on the outer button does the same job for the
+                         row as a whole. -->
+                    <button @click="keepAudioOnly = !keepAudioOnly"
+                            :class="[
+                                'w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all duration-200 border-l-4',
+                                keepAudioOnly
+                                    ? 'bg-gradient-to-r from-sky-500/10 to-blue-500/10 border-sky-400/50 dark:border-sky-500/50 border-l-sky-500'
+                                    : 'bg-[var(--bg-tertiary)] border-[var(--border-secondary)] border-l-sky-400/60 dark:border-l-sky-500/50 hover:border-[var(--border-focus)] hover:border-l-sky-500'
+                            ]">
+                        <div class="flex items-center gap-3">
+                            <div :class="[
+                                'w-8 h-8 rounded-full flex items-center justify-center transition-all',
+                                keepAudioOnly
+                                    ? 'bg-gradient-to-br from-sky-500 to-blue-600 text-white'
+                                    : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
+                            ]">
+                                <i class="fas fa-video-slash text-sm"></i>
+                            </div>
+                            <div class="text-left">
+                                <span :class="['text-sm font-medium', keepAudioOnly ? 'text-sky-700 dark:text-sky-300' : 'text-[var(--text-secondary)]']">
+                                    ${ t('upload.keepAudioOnly') }
+                                </span>
+                                <p v-if="!keepAudioOnly" class="text-[10px] text-[var(--text-muted)]">
+                                    ${ t('upload.keepAudioOnlySubtitleOff') }
+                                </p>
+                                <p v-else class="text-[10px] text-sky-600 dark:text-sky-400">
+                                    ${ t('upload.keepAudioOnlySubtitleOn') } &bull; ${ t('upload.keepAudioOnlyLargerAllowed') }
+                                </p>
+                            </div>
+                        </div>
+                        <div :class="[
+                            'w-10 h-5 rounded-full relative transition-all duration-200',
+                            keepAudioOnly ? 'bg-gradient-to-r from-sky-500 to-blue-500' : 'bg-[var(--bg-secondary)]'
+                        ]">
+                            <div :class="[
+                                'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200',
+                                keepAudioOnly ? 'left-5' : 'left-0.5'
+                            ]"></div>
+                        </div>
+                    </button>
+                </div>
+
+                <!-- Note: Upload + Incognito-upload buttons moved to
+                     the sticky modal-footer below so the primary
+                     action is always reachable without scrolling. -->
+            </div>
+
+            <!-- Divider (hidden when files are selected) -->
+            <div v-if="pendingQueueFiles.length === 0" class="my-4 flex items-center">
+                <div class="flex-grow border-t border-[var(--border-secondary)]"></div>
+                <span class="flex-shrink mx-3 text-[10px] text-[var(--text-muted)] uppercase" v-text="t('common.or')"></span>
+                <div class="flex-grow border-t border-[var(--border-secondary)]"></div>
+            </div>
+
+            <!-- Audio Recording Options (hidden when files are selected) -->
+            <div v-if="pendingQueueFiles.length === 0" class="space-y-2">
+                <h3 class="text-xs font-medium text-[var(--text-secondary)] text-center" v-text="t('recording.title')"></h3>
+
+                <!-- Microphone Recording — primary calm action.
+                     Microphone is the everyday case so it takes the
+                     full-width primary slot. Previous design used a
+                     saturated red bg which competed with the upload
+                     action in the footer for visual attention; now
+                     uses the muted accent palette with the recording
+                     dot left of the label so the function is still
+                     obvious without being loud. -->
+                <button @click="startRecording('microphone')"
+                        :disabled="isPreparingRecording"
+                        :class="{ 'opacity-60 cursor-wait': isPreparingRecording }"
+                        class="w-full px-3 py-2.5 rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors disabled:pointer-events-none"
+                        style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-secondary);"
+                        onmouseover="this.style.borderColor='var(--text-accent)'" onmouseout="this.style.borderColor='var(--border-secondary)'">
+                    <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
+                    <i class="fas fa-microphone text-[var(--text-muted)]"></i>
+                    <span v-text="t('recording.microphone')"></span>
+                </button>
+
+                <!-- Secondary record sources. Lower hierarchy
+                     (smaller padding, fully neutral background,
+                     icon-only tint accent) since these are less
+                     common than the microphone case. The amber
+                     "tab-audio-only" indicator dot is preserved. -->
+                <div v-if="canRecordSystemAudio" class="grid grid-cols-2 gap-2">
+                    <button @click="startRecording('system')"
+                            :disabled="isPreparingRecording"
+                            :class="{ 'opacity-60 cursor-wait': isPreparingRecording }"
+                            class="relative px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors disabled:pointer-events-none"
+                            style="background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-secondary);"
+                            onmouseover="this.style.borderColor='var(--text-accent)'" onmouseout="this.style.borderColor='var(--border-secondary)'">
+                        <span v-if="audioCaps && audioCaps.supportsTabAudio && !audioCaps.supportsSystemAudio"
+                              class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400"
+                              :title="t('recording.tabAudioOnlyTooltip')"></span>
+                        <i class="fas fa-desktop text-blue-500"></i>
+                        <span v-text="t('recording.systemAudio')"></span>
+                    </button>
+
+                    <button @click="startRecording('both')"
+                            :disabled="isPreparingRecording"
+                            :class="{ 'opacity-60 cursor-wait': isPreparingRecording }"
+                            class="relative px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs font-medium transition-colors disabled:pointer-events-none"
+                            style="background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-secondary);"
+                            onmouseover="this.style.borderColor='var(--text-accent)'" onmouseout="this.style.borderColor='var(--border-secondary)'">
+                        <span v-if="audioCaps && audioCaps.supportsTabAudio && !audioCaps.supportsSystemAudio"
+                              class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400"
+                              :title="t('recording.tabAudioOnlyTooltip')"></span>
+                        <i class="fas fa-microphone text-purple-500"></i>
+                        <i class="fas fa-desktop text-purple-500"></i>
+                        <span class="hidden sm:inline" v-text="t('recording.microphoneAndSystem')"></span>
+                        <span class="sm:hidden">${ t('recording.micPlusSys') }</span>
+                    </button>
+                </div>
+
+                <!-- Opt-in video capture for the two display-capture modes
+                     (#303). Only offered when the server retains video
+                     streams (VIDEO_RETENTION) — without retention the
+                     pipeline would strip the video back out at
+                     transcription time, so the toggle would be a no-op. -->
+                <label v-if="canRecordSystemAudio && videoRetentionEnabled"
+                       class="flex items-start gap-2 mt-1 px-1 cursor-pointer">
+                    <input type="checkbox" v-model="recordSystemVideo" class="checkbox mt-0.5">
+                    <span class="text-[11px] flex-1" style="color: var(--text-secondary);">
+                        <i class="fas fa-video mr-1 text-[var(--text-muted)]"></i>
+                        <strong>${ t('recording.recordVideoTitle') }</strong>
+                        ${ t('recording.recordVideoHelp') }
+                    </span>
+                </label>
+
+                <!-- Compact platform-aware hint when full system audio is
+                     not available on this OS / browser combination. -->
+                <div v-if="audioCaps && audioCaps.supportsTabAudio && !audioCaps.supportsSystemAudio"
+                     class="text-[11px] text-[var(--text-muted)] flex items-center gap-1 mt-1">
+                    <i class="fas fa-circle-info text-amber-500"></i>
+                    <span>
+                        ${ t('recording.tabAudioHintPrefix') } <span v-text="platformInfo.os"></span> ${ t('recording.tabAudioHintSuffix') } <strong>${ t('recording.tabAudioBold') }</strong> ${ t('recording.tabAudioHintDash') }
+                        <button @click="showSystemAudioHelp = true" class="underline" style="color: var(--text-accent);">${ t('recording.howToEnableFullSystemAudio') }</button>.
+                    </span>
+                </div>
+
+                <!-- Detected virtual audio device — surfaced as an
+                     alternative microphone input. -->
+                <div v-if="virtualAudioDevices && virtualAudioDevices.length > 0"
+                     class="text-[11px] flex items-center gap-1 mt-1">
+                    <i class="fas fa-check-circle text-green-500"></i>
+                    <span style="color: var(--text-secondary);">
+                        ${ t('recording.detectedDevicePrefix') } <span v-text="virtualAudioDevices[0].label"></span> ${ t('recording.detectedDeviceSuffix') }
+                    </span>
+                </div>
+
+                <!-- Input device picker (collapsed by default). Lets
+                     the user pick the primary input AND an optional
+                     secondary input which Speakr mixes in via Web
+                     Audio at recording time — the canonical solution
+                     for capturing your voice + remote participants on
+                     macOS / Linux where the browser can't capture full
+                     OS audio natively. Pre-permission the device
+                     labels are empty; the inline button calls
+                     getUserMedia briefly to populate them. The
+                     audio-processing opt-out lives inside this group
+                     too since it's a device-level capture setting. -->
+                <details :open="!!pendingMicrophoneSelection"
+                         @toggle="pendingMicrophoneSelection && !$event.target.open && ($event.target.open = true)"
+                         class="disclosure-card text-[11px] mt-1 group">
+                    <summary class="cursor-pointer flex items-center gap-1 px-2 py-1.5 rounded-md hover:bg-[var(--bg-tertiary)] transition-colors" style="color: var(--text-muted); list-style: none;">
+                        <i class="fas fa-sliders-h"></i>
+                        <span>${ t('recording.inputDevices') }</span>
+                        <span v-if="selectedSecondaryDeviceId" class="text-green-500 font-medium">· ${ t('recording.mixingTwoInputs') }</span>
+                        <i class="fas fa-chevron-down ml-auto text-[10px] transition-transform group-open:rotate-180"></i>
+                    </summary>
+                    <div class="disclosure-card-body space-y-2">
+                        <div v-if="pendingMicrophoneSelection"
+                             class="rounded-md border border-blue-300/60 bg-blue-50/70 dark:border-blue-700/60 dark:bg-blue-950/30 px-2.5 py-2">
+                            <div class="flex items-start gap-2">
+                                <i class="fas fa-microphone text-blue-500 mt-0.5"></i>
+                                <div>
+                                    <p class="font-medium" style="color: var(--text-primary);">${ t('recording.anotherMicAvailable') }</p>
+                                    <p class="text-[10px] mt-0.5" style="color: var(--text-secondary);">${ t('recording.chooseMicBeforeRecording') }</p>
+                                    <p class="text-[10px] mt-1 font-medium" style="color: var(--text-accent);"
+                                       v-text="pendingMicrophoneSelection.candidates.map(d => d.label).join(', ')"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="!inputAudioDevices || inputAudioDevices.length === 0 || !inputAudioDevices.some(d => d.label)"
+                             class="text-[11px]" style="color: var(--text-muted);">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            ${ t('recording.grantMicPermissionHint') }
+                            <button @click.prevent="requestMicrophonePermission"
+                                    class="underline mt-1 block" style="color: var(--text-accent);">
+                                ${ t('recording.requestMicPermission') }
+                            </button>
+                        </div>
+                        <template v-else>
+                            <div>
+                                <label class="block text-[11px] mb-1" style="color: var(--text-muted);">${ t('recording.primaryInput') }</label>
+                                <select v-model="selectedMicDeviceId"
+                                        class="w-full text-[11px] px-2 py-1 rounded border border-[var(--border-secondary)] bg-[var(--bg-input)] text-[var(--text-primary)]">
+                                    <option value="">${ t('recording.systemDefault') }</option>
+                                    <option v-for="d in inputAudioDevices" :key="d.deviceId" :value="d.deviceId">
+                                        ${ d.label }${ d.isVirtual ? ' · ' + t('recording.virtualMonitor') : '' }
+                                    </option>
+                                </select>
+                            </div>
+                            <div v-if="pendingMicrophoneSelection" class="flex items-center justify-end gap-2 pb-1">
+                                <button @click="cancelPendingMicrophoneSelection"
+                                        class="px-2.5 py-1 rounded border border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)]"
+                                        style="color: var(--text-secondary);">
+                                    ${ t('buttons.cancel') }
+                                </button>
+                                <button @click="confirmPendingMicrophoneSelection"
+                                        class="px-2.5 py-1 rounded text-white bg-blue-600 hover:bg-blue-700">
+                                    ${ t('buttons.startRecording') }
+                                </button>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] mb-1" style="color: var(--text-muted);">
+                                    ${ t('recording.alsoMixIn') }
+                                </label>
+                                <select v-model="selectedSecondaryDeviceId"
+                                        class="w-full text-[11px] px-2 py-1 rounded border border-[var(--border-secondary)] bg-[var(--bg-input)] text-[var(--text-primary)]">
+                                    <option value="">${ t('recording.noneOption') }</option>
+                                    <option v-for="d in inputAudioDevices" :key="'sec-' + d.deviceId" :value="d.deviceId">
+                                        ${ d.label }${ d.isVirtual ? ' · ' + t('recording.virtualMonitor') : '' }
+                                    </option>
+                                </select>
+                                <p class="text-[10px] mt-1" style="color: var(--text-muted);">
+                                    ${ t('recording.mixHelp') }
+                                </p>
+                                <!-- Linux-specific: Chrome filters
+                                     "Monitor of ..." sources out of
+                                     enumerateDevices, so the picker
+                                     above won't show them by default
+                                     even though pavucontrol does.
+                                     Point users at the help guide
+                                     where Option C explains the
+                                     pactl one-liner to expose a
+                                     virtual source Chrome WILL list. -->
+                                <p v-if="platformInfo && platformInfo.os === 'Linux'"
+                                   class="text-[10px] mt-1" style="color: var(--text-muted);">
+                                    <i class="fas fa-circle-info text-amber-500"></i>
+                                    ${ t('recording.linuxMonitorHintPrefix') } <code style="background: var(--bg-secondary); padding: 0 2px; border-radius: 2px;">pactl</code> ${ t('recording.linuxMonitorHintSuffix') }
+                                    <button @click.prevent="showSystemAudioHelp = true" class="underline" style="color: var(--text-accent);">${ t('recording.openGuide') }</button>
+                                </p>
+                            </div>
+                        </template>
+
+                        <!-- Audio-processing opt-out. Chrome's getUserMedia
+                             applies echoCancellation + noiseSuppression +
+                             autoGainControl by default, which is correct for
+                             voice but kills sustained speech / music coming
+                             in through a monitor source or virtual audio
+                             device (the suppressor classifies it as noise
+                             after about a second). It's a device-level
+                             capture setting so it lives in this group.
+                             Persisted to localStorage. -->
+                        <label class="flex items-start gap-2 pt-2 mt-1 border-t border-[var(--border-secondary)] cursor-pointer">
+                            <input type="checkbox" v-model="disableAudioProcessing" class="checkbox mt-0.5">
+                            <span class="text-[11px] flex-1" style="color: var(--text-secondary);">
+                                <strong>${ t('recording.disableAudioProcessingTitle') }</strong>
+                                ${ t('recording.disableAudioProcessingHelp') }
+                            </span>
+                        </label>
+                    </div>
+                </details>
+
+                <!-- Per-mode descriptions removed: the three recording
+                     buttons + their colour-coded icons + the top capability
+                     banner already convey what each mode does, so the
+                     "Microphone: records your voice…" lines were redundant.
+                     We keep only the hard-unsupported warning (Firefox /
+                     Safari, where getDisplayMedia can't capture any audio)
+                     since that explains why the system-audio buttons are
+                     unavailable and points at the help guide. -->
+                <div v-if="!canRecordSystemAudio" class="text-[10px] text-amber-600 dark:text-amber-400 mt-2">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    ${ t('recording.systemAudioNotSupported') }
+                    <button @click="showSystemAudioHelp = true" class="ml-1 text-blue-500 hover:text-blue-600 underline">
+                        <span v-text="t('buttons.help')"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progressive disclosure: Folder + Tags + Prompt
+                 variables + Advanced ASR all live behind a single
+                 collapsible "Options" group. The summary line shows
+                 chips for whatever the user has selected so they can
+                 verify state without expanding; clicking opens the
+                 full editor. Defaults to collapsed because most
+                 uploads use whatever was last set and the chips
+                 already communicate that. -->
+            <details class="mt-4 upload-options-group">
+                <summary class="cursor-pointer flex items-center gap-2 px-3 py-2 rounded-md hover:bg-[var(--bg-tertiary)] transition-colors"
+                         style="list-style: none; background: var(--bg-tertiary);">
+                    <i class="fas fa-sliders-h text-[var(--text-muted)]"></i>
+                    <span class="text-sm font-medium" style="color: var(--text-secondary);">${ t('upload.options') }</span>
+
+                    <!-- Chip summary of currently-set values. Each
+                         chip has a small × button so the user can
+                         clear individual selections without expanding
+                         the full editor. @click.stop.prevent stops
+                         the click from toggling the <details> open
+                         state (we want JUST the clear, not expand). -->
+                    <div class="flex items-center gap-1 ml-2 flex-wrap min-w-0">
+                        {# locol_vocol: folder/tag chips removed #}{% if false %}
+<!-- Folder chip -->
+                        <span v-if="foldersEnabled && selectedFolderId && getFolderById(selectedFolderId)"
+                              class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded-full"
+                              :style="{ background: getFolderColor(selectedFolderId) + '22', color: getFolderColor(selectedFolderId) }">
+                            <i class="fas fa-folder"></i>
+                            <span class="truncate max-w-[120px]" v-text="getFolderById(selectedFolderId).name"></span>
+                            <button @click.stop.prevent="selectedFolderId = null"
+                                    class="hover:opacity-100 opacity-70"
+                                    title="Clear folder">
+                                <i class="fas fa-times text-[9px]"></i>
+                            </button>
+                        </span>
+                        <!-- Tag count chip -->
+                        <span v-if="selectedTags.length > 0"
+                              class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded-full"
+                              style="background: var(--bg-accent); color: var(--text-accent);">
+                            <i class="fas fa-tag"></i>
+                            <span>${ selectedTags.length } ${ selectedTags.length === 1 ? 'tag' : 'tags' }</span>
+                            <button @click.stop.prevent="selectedTagIds = []"
+                                    class="hover:opacity-100 opacity-70"
+                                    title="Clear tags">
+                                <i class="fas fa-times text-[9px]"></i>
+                            </button>
+                        </span>
+                        {% endif %}
+<!-- Language chip (only if non-default) -->
+                        <span v-if="uploadLanguage"
+                              class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded-full"
+                              style="background: var(--bg-accent); color: var(--text-accent);">
+                            <i class="fas fa-language"></i>
+                            <span v-text="uploadLanguage"></span>
+                            <button @click.stop.prevent="uploadLanguage = ''"
+                                    class="hover:opacity-100 opacity-70"
+                                    title="Clear language">
+                                <i class="fas fa-times text-[9px]"></i>
+                            </button>
+                        </span>
+                        <!-- Speakers chip (only if non-default) -->
+                        <span v-if="uploadMinSpeakers || uploadMaxSpeakers"
+                              class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded-full"
+                              style="background: var(--bg-accent); color: var(--text-accent);">
+                            <i class="fas fa-users"></i>
+                            <span>${ uploadMinSpeakers || '?' }${ uploadMinSpeakers != uploadMaxSpeakers ? '-' + (uploadMaxSpeakers || '?') : '' }</span>
+                            <button @click.stop.prevent="uploadMinSpeakers = ''; uploadMaxSpeakers = ''"
+                                    class="hover:opacity-100 opacity-70"
+                                    title="Clear speakers">
+                                <i class="fas fa-times text-[9px]"></i>
+                            </button>
+                        </span>
+                    </div>
+
+                    <i class="fas fa-chevron-down ml-auto text-xs text-[var(--text-muted)] transition-transform upload-options-chevron"></i>
+                </summary>
+
+                <div class="upload-options-body">
+
+            {# locol_vocol: folder/tag picker removed #}
+
+            <!-- Prompt template variables (from selected tag/folder custom prompts) -->
+            <div v-if="selectedPromptVariables.length > 0" class="mt-4">
+                <div class="flex items-stretch gap-1">
+                    <button type="button" @click="showPromptVariablesPanel = !showPromptVariablesPanel"
+                            class="flex-1 flex items-center justify-between px-3 py-2 bg-[var(--bg-tertiary)] rounded-md hover:bg-[var(--bg-accent)] transition-colors text-xs font-medium">
+                        <span class="flex items-center gap-2 text-[var(--text-secondary)]">
+                            <i class="fas fa-keyboard text-[var(--text-muted)]"></i>
+                            <span>${ t('promptVariables.title') }</span>
+                            <span class="text-[10px] text-[var(--text-muted)]">(${ selectedPromptVariables.length })</span>
+                        </span>
+                        <i :class="['fas text-[var(--text-muted)]', showPromptVariablesPanel ? 'fa-chevron-up' : 'fa-chevron-down']"></i>
+                    </button>
+                    <details class="relative">
+                        <summary
+                            :title="t('promptVariables.infoTooltip')"
+                            class="list-none cursor-pointer flex items-center justify-center px-3 h-full bg-[var(--bg-tertiary)] rounded-md hover:bg-[var(--bg-accent)] text-[var(--text-muted)] hover:text-[var(--text-accent)] transition-colors">
+                            <i class="fas fa-info-circle text-xs"></i>
+                        </summary>
+                        <div class="absolute right-0 top-full mt-1 z-20 w-64 p-3 text-[11px] text-[var(--text-secondary)] leading-snug bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-md shadow-lg">
+                            ${ t('promptVariables.hintUpload') }
+                        </div>
+                    </details>
+                </div>
+                <div class="disclosure-anim mt-2" :class="{ 'is-open': showPromptVariablesPanel }">
+                  <div class="disclosure-anim__inner">
+                <div class="p-3 bg-[var(--bg-tertiary)] rounded-md space-y-3 border border-[var(--border-secondary)]">
+                    <div v-for="variable in selectedPromptVariables" :key="variable.name" class="space-y-1">
+                        <label class="block text-xs font-medium text-[var(--text-secondary)]" :for="'pv-' + variable.name">
+                            ${ variable.label }
+                            <span class="ml-1 text-[10px] text-[var(--text-muted)] font-normal">
+                                <span v-for="(src, i) in variable.sources" :key="i">
+                                    <span v-if="i > 0">, </span>
+                                    <i :class="{
+                                        'fas fa-folder': src.type === 'folder',
+                                        'fas fa-tag': src.type === 'tag',
+                                        'fas fa-user': src.type === 'user',
+                                        'fas fa-cog': src.type === 'admin'
+                                    }" class="mr-0.5"></i>${ src.name }
+                                </span>
+                            </span>
+                        </label>
+                        <textarea
+                            :id="'pv-' + variable.name"
+                            :value="uploadPromptVariables[variable.name] || ''"
+                            @input="uploadPromptVariables[variable.name] = $event.target.value"
+                            rows="2"
+                            maxlength="8000"
+                            :placeholder="t('promptVariables.placeholderPrefix') + ' ' + variable.label.toLowerCase() + '...'"
+                            class="w-full px-2 py-1 text-sm bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--ring-focus)] resize-y font-mono"></textarea>
+                        <div class="flex justify-end text-[10px] text-[var(--text-muted)] font-mono">
+                            ${ (uploadPromptVariables[variable.name] || '').length } / 8000
+                        </div>
+                    </div>
+                </div>
+                  </div><!-- end .disclosure-anim__inner -->
+                </div><!-- end .disclosure-anim -->
+            </div>
+
+            <!-- Transcription Options (collapsible): one group for the saved
+                 template picker, initial prompt, hotwords and model, then
+                 language + speakers. Shown whenever the active connector supports
+                 any of them — not just diarization. -->
+            <div v-if="connectorSupportsDiarization || connectorSupportsSpeakerCount || connectorSupportsExactSpeakerCount || connectorSupportsHotwords || connectorSupportsInitialPrompt" class="mt-4">
+                <button @click="showAdvancedOptions = !showAdvancedOptions"
+                        :class="['disclosure-trigger w-full flex items-center justify-between px-3 py-2 bg-[var(--bg-tertiary)] rounded-md hover:bg-[var(--bg-accent)] transition-colors text-xs font-medium', { 'is-open': showAdvancedOptions }]">
+                    <span class="flex items-center gap-2 text-[var(--text-secondary)]">
+                        <i class="fas fa-cog text-[var(--text-muted)]"></i>
+                        <span v-text="t('upload.transcriptionOptions')"></span>
+                    </span>
+                    <i :class="['fas text-[var(--text-muted)]', showAdvancedOptions ? 'fa-chevron-up' : 'fa-chevron-down']"></i>
+                </button>
+
+                <div class="disclosure-anim" :class="{ 'is-open': showAdvancedOptions }">
+                  <div class="disclosure-anim__inner">
+                <div class="disclosure-panel p-3 bg-[var(--bg-tertiary)] space-y-3 border border-[var(--border-secondary)]">
+                    {% with apply_template_fn='applyInitialPromptTemplate',
+                            prompt_ref='uploadInitialPrompt', hotwords_ref='uploadHotwords',
+                            model_ref='uploadTranscriptionModel', lang_ref='uploadLanguage',
+                            exact_ref='uploadSpeakersExact', min_ref='uploadMinSpeakers', max_ref='uploadMaxSpeakers' %}
+                    {% include 'components/shared/asr-options.html' %}
+                    {% endwith %}
+
+                    <p class="text-xs text-[var(--text-muted)] pt-1">
+                        <i class="fas fa-info-circle mr-1 text-[var(--text-accent)]"></i>
+                        ${ t('upload.settingsApplyToAll') }
+                    </p>
+                </div>
+                  </div><!-- end .disclosure-anim__inner -->
+                </div><!-- end .disclosure-anim -->
+            </div>
+
+                </div><!-- end .upload-options-body wrapper inside details -->
+            </details><!-- end Options progressive-disclosure group -->
+        </div>
+
+        <!-- Sticky modal-footer: primary Upload action always visible
+             without scrolling. The button is enabled only when the
+             queue has files; otherwise it's a clear, disabled
+             affordance pointing at the next required step. The
+             Incognito variant swaps in when incognito mode is active. -->
+        <p v-if="enableIncognitoMode && incognitoMode && pendingQueueFiles.length > 1"
+           class="text-xs text-violet-600 dark:text-violet-400 text-center px-5 py-2 border-t"
+           style="border-top-color: var(--border-primary);">
+            <i class="fas fa-info-circle mr-1"></i>
+            ${ t('incognito.oneFileAtATime') }
+        </p>
+        <div class="modal-footer modal-footer--between">
+            <button @click="closeUploadView" class="btn btn--ghost">
+                <span v-text="t('common.cancel')"></span>
+            </button>
+
+            <!-- Normal Upload Buttons (when not in incognito mode or feature disabled) -->
+            <div v-if="!incognitoMode || !enableIncognitoMode" class="flex items-center gap-2">
+                <!-- Queue the files but keep the modal open for more -->
+                <button v-if="!joinActive" @click="startUpload"
+                        :disabled="pendingQueueFiles.length === 0"
+                        class="btn btn--ghost">
+                    <i class="fas fa-plus"></i>
+                    <span v-text="t('upload.uploadAndAddMore')"></span>
+                </button>
+                <!-- Queue the files and close the modal -->
+                <button @click="startUploadAndClose"
+                        :disabled="pendingQueueFiles.length === 0"
+                        class="btn btn--primary">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span v-if="pendingQueueFiles.length === 0">${ t('upload.title') || 'Upload' }</span>
+                    <span v-else-if="joinActive" v-text="t('upload.uploadAndJoin', { count: pendingQueueFiles.length })"></span>
+                    <span v-else v-text="t('upload.uploadNFiles', { count: pendingQueueFiles.length })"></span>
+                </button>
+            </div>
+
+            <!-- Incognito Upload Button (only when feature enabled and mode selected) -->
+            <button v-else
+                    @click="startIncognitoUpload"
+                    :disabled="incognitoProcessing || pendingQueueFiles.length !== 1"
+                    class="btn btn--primary"
+                    style="background: linear-gradient(to right, #8b5cf6, #9333ea); border-color: transparent; color: white;">
+                <i :class="incognitoProcessing ? 'fas fa-spinner fa-spin' : 'fas fa-user-secret'"></i>
+                <span v-if="incognitoProcessing">${ t('incognito.processing') }</span>
+                <span v-else-if="pendingQueueFiles.length !== 1">${ t('incognito.selectExactlyOneFile') }</span>
+                <span v-else>${ t('incognito.processInIncognito') }</span>
+            </button>
+        </div>
+    </div>
+</div>

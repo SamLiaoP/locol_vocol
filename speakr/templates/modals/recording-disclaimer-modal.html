@@ -1,0 +1,20 @@
+<!-- Recording Disclaimer Modal (design system v1) -->
+<div v-if="showRecordingDisclaimerModal" @click.self="cancelRecordingDisclaimer" class="modal-overlay">
+    <div class="modal-panel modal-panel--lg">
+        <div class="modal-header">
+            <i class="fas fa-info-circle text-2xl text-[var(--text-accent)]"></i>
+            <h3 class="modal-title" v-text="t('modal.recordingNotice')"></h3>
+            <button @click="cancelRecordingDisclaimer" class="modal-close" :title="t('buttons.close')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="prose-flush" v-html="recordingDisclaimerHtml"></div>
+        </div>
+        <div class="modal-footer">
+            <button @click="cancelRecordingDisclaimer" class="btn btn--ghost">${ t('buttons.cancel') }</button>
+            <button @click="acceptRecordingDisclaimer" class="btn btn--primary">
+                <i class="fas fa-microphone"></i>
+                <span>${ t('buttons.startRecording') || 'Start Recording' }</span>
+            </button>
+        </div>
+    </div>
+</div>

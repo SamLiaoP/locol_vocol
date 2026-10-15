@@ -1,0 +1,279 @@
+# System Settings
+
+System Settings is where you configure the fundamental behaviors that affect every user and recording in your Speakr instance. These global parameters shape how the system operates, from technical limits to user-facing features.
+
+![System Settings](../assets/images/screenshots/admin-system-settings.png)
+
+## Transcript Length Limit
+
+The transcript length limit determines how much text gets sent to the AI when generating summaries or responding to chats. This seemingly simple number has a big effect on both quality and cost.
+
+When set to "No Limit," the entire transcript goes to the AI regardless of length. This ensures the AI has complete context but can become expensive for long recordings. A two-hour meeting might generate 20,000 words of transcript, consuming significant API tokens and potentially overwhelming the AI model's context window. This limit will also be applied to the speaker auto-detection feature in the speaker identification modal.
+
+Setting a character limit (like 50,000 characters) creates a ceiling on API consumption. The system will truncate very long transcripts, sending only the beginning portion to the AI. This keeps costs predictable but might mean the AI misses important content from later in the recording.
+
+The sweet spot depends on your use case. For typical meetings under an hour, 50,000 characters usually captures everything. For longer sessions, you might increase this limit or train users to split recordings. Monitor your API costs and user feedback to find the right balance.
+
+## Default Storage Quota
+
+**`default_storage_quota_mb`** (default 0, no limit) is the storage quota given to accounts created after it is set, by an administrator, by registration or by SSO. The quota of an existing account does not change; it is set per user in Edit User. See [Storage Quotas](user-management.md#storage-quotas).
+
+## Maximum File Size
+
+Two separate caps apply depending on file type:
+
+- **`max_file_size_mb`** (default 300 MB) — applies to audio uploads. Protects storage from runaway audio.
+- **`max_audio_only_video_size_mb`** (default 4 × `max_file_size_mb`, ≈ 1200 MB) — applies to **any** video file regardless of whether the video stream will be kept. Video files are typically much larger than the audio they contain, so they get their own (larger) ceiling.
+
+When chunking is enabled (`ENABLE_CHUNKING=true`, the default), the upload route lets files through above these caps and chunks them on the server for the ASR call. When chunking is off, the caps are enforced strictly. Files whose **extracted audio** still exceeds `max_file_size_mb` are rejected with a clear error when chunking is off; with chunking on, the chunking pipeline handles them.
+
+The "Keep audio only" toggle on the upload form determines whether the video stream is retained — it no longer affects the size cap (that's controlled by file type). Use it when you specifically don't want the video kept on disk.
+
+Raising these limits allows longer recordings but requires careful consideration. Larger files take longer to upload, consume more storage, and might timeout during processing. Your server needs enough memory to handle these files, and your storage must accommodate them. Network timeouts, browser limitations, and user patience all factor into what's practical.
+
+If users frequently hit the limit, consider whether they really need single recordings that long. Often, splitting long sessions into logical segments produces better results - easier to review, faster to process, and more focused summaries.
+
+## ASR Timeout Settings
+
+The ASR timeout determines how long Speakr will wait for advanced transcription services to complete their work. The default 1,800 seconds (30 minutes) handles most recordings, but you might need to adjust based on your transcription service and typical file sizes.
+
+Setting this too low causes longer recordings to fail even when the transcription service is working normally. The recording appears stuck in processing, then eventually fails, frustrating users who must retry or give up. Setting it too high ties up system resources waiting for services that might have actually failed.
+
+Your optimal timeout depends on your transcription service's performance and your users' recording lengths. Monitor processing times for successful transcriptions and set the timeout comfortably above your longest normal processing time. If you regularly process multi-hour recordings, you might need 3,600 seconds or more.
+
+## Default Timezone
+
+Dates in generated titles (naming-template dates and default titles), in exported files and in the dates given to the AI are written in each user's timezone. A user's timezone is reported by their browser or chosen in Account → Preferences. The default timezone is used for users without one, for example accounts that only use the API or the watch folder. On a new installation it is UTC; if the `TIMEZONE` variable from earlier versions is set, its value is used as the initial default. Stored dates and API responses are always UTC.
+
+## Recording Disclaimer
+
+The recording disclaimer appears before users start any recording session, making it perfect for legal notices, policy reminders, or usage guidelines. This markdown-formatted message ensures users understand their responsibilities before creating content.
+
+Organizations often use this for compliance requirements - reminding users about consent requirements, data handling policies, or appropriate use guidelines. Educational institutions might note that recordings are for academic purposes only. Healthcare organizations could reference HIPAA compliance requirements.
+
+!!! info "Full Markdown Support (v0.6.2+)"
+    The recording disclaimer now supports **full markdown formatting**, including:
+
+    - **Headings** - Structure your disclaimer with `# Main Title` and `## Sections`
+    - **Lists** - Bulleted and numbered lists for clear requirements
+    - **Bold and Italic** - Emphasize important terms with `**bold**` or `*italic*`
+    - **Links** - Reference detailed policies with `[Privacy Policy](https://yoursite.com/privacy)`
+    - **Code blocks** - Include examples or technical requirements
+    - **Blockquotes** - Highlight key legal notices
+
+    Example markdown disclaimer:
+    ```markdown
+    ## Recording Consent Required
+
+    By starting this recording, you agree to:
+
+    1. Obtain consent from all participants
+    2. Comply with [company privacy policy](https://example.com/privacy)
+    3. Handle recordings according to **GDPR** requirements
+
+    > **Important**: Recordings containing sensitive information must be deleted within 30 days.
+    ```
+
+Keep disclaimers concise and relevant. Users see this message frequently, so lengthy legal text becomes an ignored click-through. Focus on the most important points, and link to detailed policies if needed. The markdown support lets you format the message clearly for better readability and comprehension.
+
+## Upload Disclaimer
+
+The upload disclaimer works just like the recording disclaimer, but it appears when users upload files rather than when they start recording. Every time a user drags and drops files or selects files for upload, they'll see this notice and must accept it before the files are queued for processing.
+
+This is useful when uploaded files may contain third-party content or when your organization needs to remind users about data handling before they submit files to the system. The disclaimer supports full markdown formatting, just like the recording disclaimer.
+
+!!! example "Example upload disclaimer"
+    ```markdown
+    ## Upload Policy
+
+    By uploading files, you confirm that:
+
+    - You have the right to share this content
+    - No sensitive personal data is included without authorization
+    - Files will be processed by external transcription services
+
+    > See our [data handling policy](https://example.com/policy) for details.
+    ```
+
+Leave this field empty to disable the upload disclaimer entirely. When empty, file uploads proceed immediately without any prompt.
+
+## Custom Banner
+
+The custom banner displays a persistent message across the top of the main content area for all users. It's useful for announcements, maintenance notices, compliance reminders, or any message you want everyone to see when they use Speakr.
+
+The banner appears below the header and above the main content. Users can dismiss it by clicking the X button, but it reappears on page refresh, ensuring the message stays visible as long as you have it configured.
+
+Like the disclaimers, the banner supports full markdown formatting, so you can include bold text, links, and other formatting. Keep banner text short and to the point since it takes up screen space.
+
+!!! example "Example banners"
+    ```markdown
+    **System update** — Speakr will be briefly unavailable on Sunday 10pm-12am for maintenance.
+    ```
+
+    ```markdown
+    All recordings are subject to our [acceptable use policy](https://example.com/aup). Contact IT with questions.
+    ```
+
+Leave this field empty to hide the banner completely.
+
+## System-Wide Impact
+
+Every setting on this page affects all users immediately. Changes take effect as soon as you save them, without requiring system restarts or user logouts. This immediate application means you should test changes carefully and communicate significant modifications to your users.
+
+The refresh button reloads settings from the database, useful if multiple admins might be making changes or if you want to ensure you're seeing the latest values. The interface shows when each setting was last updated, helping you track changes over time.
+
+## Troubleshooting Common Issues
+
+When recordings fail consistently, check if they're hitting your configured limits. The error logs will indicate if files are too large or if processing is timing out. Users might not realize their recordings exceed limits, especially if they're uploading existing content rather than recording directly.
+
+If API costs spike unexpectedly, review your transcript length limit. A single user uploading many long recordings could dramatically increase consumption if no limit is set. The combination of user activity and system settings determines your actual costs.
+
+Processing backlogs might indicate your timeout is too high. If the system waits 30 minutes for each failed transcription attempt, a series of problematic files could block the queue for hours. Balance patience for slow processing with the need to fail fast when services are actually down.
+
+## Environment Variable Configuration
+
+Beyond the UI-configurable settings above, several environment variables in your `.env` file control fundamental system behaviors. These require instance restart to take effect.
+
+### Interface Customization
+
+**HELP_CENTER_URL**: Adds a Help Center link to the user menu (on both the main app and the account/admin pages), opening in a new tab. Point it at your own FAQ, tutorial, or intranet page so users find your organization's guidance instead of the technical documentation. Unset by default (no link shown).
+
+**HELP_CENTER_LABEL**: Optional custom label for the Help Center link. When unset, a localized "Help Center" label is used.
+
+### Collaboration & Sharing
+
+**ENABLE_INTERNAL_SHARING**: Controls user-to-user sharing capabilities. Set to `true` to enable internal sharing features, allowing users to share recordings with specific colleagues. Required for group functionality. Default: `false`.
+
+**SHOW_USERNAMES_IN_UI**: Controls username visibility in the interface. When `true`, usernames are displayed throughout the UI when sharing and collaborating. When `false`, usernames are hidden - users must know each other's usernames to share recordings (they type the username manually). Default: `false`.
+
+**ENABLE_PUBLIC_SHARING**: Controls whether public share links can be created. When `true`, authorized users can generate secure links for external sharing. When `false`, only internal sharing is available. Default: `false`.
+
+### User Permissions
+
+**USERS_CAN_DELETE**: Determines whether regular users can delete their own recordings. When `true`, users see delete buttons for their recordings. When `false`, only administrators can delete recordings. This helps prevent accidental data loss and maintains content retention for compliance. Default: `true`.
+
+### Retention & Auto-Deletion
+
+**ENABLE_AUTO_DELETION**: Enables the automated retention system. When `true`, recordings older than the retention period are automatically processed for deletion. Default: `false`.
+
+**DEFAULT_RETENTION_DAYS**: Global retention period in days for recordings without tag-specific retention. Set to `0` to disable auto-deletion. Tag-level retention policies can override this default. Default: `0` (disabled).
+
+**DELETION_MODE**: Controls what gets deleted: `audio_only` removes audio files but preserves transcriptions and metadata, while `full_recording` removes everything. Audio-only mode maintains searchable records while saving storage space. Default: `audio_only`.
+
+For detailed retention configuration, see the [Retention & Auto-Deletion](retention.md) guide.
+
+### Background Processing Queues
+
+Speakr uses separate job queues for transcription and summarization to prevent slow ASR processing from blocking quick summary generation.
+
+**JOB_QUEUE_WORKERS**: Number of workers for transcription jobs (ASR processing). These are slow jobs that can take 5-30 minutes. Default: `2`.
+
+**SUMMARY_QUEUE_WORKERS**: Number of workers for summary jobs (LLM API calls). These are fast jobs that typically complete in under a minute. Default: `2`.
+
+**JOB_MAX_RETRIES**: How many times a failed job will be retried before being marked as failed. Default: `3`.
+
+Jobs are persisted to the database and survive application restarts. If Speakr restarts while jobs are processing, they automatically resume from where they left off.
+
+**These are threads, not processes.** `JOB_QUEUE_WORKERS` controls how many transcriptions run at once inside the one process that owns the queue, which is the right shape for this work: a worker spends its time waiting on an ASR endpoint or an LLM API rather than using CPU, so more threads means more concurrency without more memory.
+
+They are a separate thing from gunicorn's `--workers`, which controls how many processes serve HTTP. The container runs three of those by default. Because Speakr's startup code runs in every process that imports the app, background work is claimed by exactly one of them: the others serve requests and enqueue jobs normally, but run no workers, no watch-folder monitor and no schedulers. Before v0.10.6-alpha every process ran its own copy, which could send the same recording to the ASR service once per gunicorn worker. Raising `--workers` for more request capacity is safe.
+
+If the process that owns the background work is recycled or killed, the replacement claims it on startup and any job that was interrupted is recovered.
+
+### Folders Feature
+
+**ENABLE_FOLDERS**: Enable the folders organization feature. When `true`, users can create folders to organize recordings with per-folder custom prompts and ASR settings. Default: `false`.
+
+### Security & Session Cookies
+
+**SESSION_COOKIE_SECURE**: When `true`, the session cookie is sent only over HTTPS. Set this to `true` for any production deployment behind TLS (Nginx Proxy Manager, Caddy, Traefik with a real certificate). Default: `false`, so http://localhost and bare-LAN deployments keep working out of the box. If you turn this on and reach the instance over plain HTTP, the browser will silently drop the cookie and you'll be unable to log in.
+
+### Public Share Page Rendering
+
+**READABLE_PUBLIC_LINKS**: When `true`, transcripts on public share pages are server-side rendered in HTML, making them accessible to LLMs, scrapers, and accessibility tools. When `false`, transcripts are rendered client-side via JavaScript. Default: `false`.
+
+### Admin User Creation
+
+**SKIP_EMAIL_DOMAIN_CHECK**: When `true`, bypasses DNS validation of email domains when creating admin users via the setup script. Useful for development or when DNS lookups are restricted. Default: `false`.
+
+### Speaker Profile Cleanup
+
+**DELETE_ORPHANED_SPEAKERS**: Controls whether speaker profiles are automatically deleted when all their associated recordings are removed. When `false` (the default), speaker profiles and voice embeddings are preserved. When `true`, speakers with no remaining recordings are automatically cleaned up. Default: `false`.
+
+### Video Retention
+
+**VIDEO_RETENTION**: When enabled, uploaded video files keep their video stream for in-browser playback instead of extracting audio and discarding the video. The audio is extracted to a temporary file for transcription only, then cleaned up after processing. The video renders with a native `<video>` player alongside the transcript, with full seeking support via HTTP Range requests. All player controls (play/pause, seek, speed, volume) work identically. Ideal for presentations, lectures, and screen recordings. Default: `false`.
+
+### Video Passthrough to ASR
+
+**VIDEO_PASSTHROUGH_ASR**: When enabled, original video files are sent directly to the ASR backend without extracting audio first. This is useful for custom ASR backends that accept video files and handle audio extraction internally — for example, containers that extract multiple audio tracks from a video for separate processing. When active, video files bypass audio extraction, codec conversion, and chunking entirely. Audio file uploads are unaffected. This setting is independent of `VIDEO_RETENTION` — you can use either or both. Default: `false`.
+
+!!! warning
+    Only enable this if your ASR backend actually accepts video files. Standard services like OpenAI's Whisper API will reject video input.
+
+### Concurrent Uploads
+
+**MAX_CONCURRENT_UPLOADS**: Controls how many files can be uploaded simultaneously when batch uploading. Higher values speed up batch uploads but use more bandwidth and server resources. Default: `3`.
+
+### Audio Compression
+
+Speakr can automatically compress lossless audio uploads (WAV, AIFF) to save storage space. This happens transparently on upload - the original file is replaced with the compressed version.
+
+**AUDIO_COMPRESS_UPLOADS**: Enable automatic compression of lossless uploads. When `true`, WAV and AIFF files are compressed on upload. Already-compressed formats (MP3, AAC, OGG, etc.) are never re-encoded. Default: `true`.
+
+**AUDIO_CODEC**: Target compression format. Options:
+
+- `mp3` - Lossy, excellent compatibility, smallest files (~90% reduction)
+- `flac` - Lossless, preserves full quality (~50-70% reduction)
+- `opus` - Modern lossy codec, efficient for speech
+
+Default: `mp3`.
+
+**AUDIO_BITRATE**: Bitrate for lossy codecs (MP3, Opus). Common values: `64k`, `128k`, `192k`. Ignored for FLAC. Default: `128k`.
+
+### Configuration Example
+
+```bash
+# Enable collaboration features
+ENABLE_INTERNAL_SHARING=true
+SHOW_USERNAMES_IN_UI=true
+ENABLE_PUBLIC_SHARING=false
+
+# User permissions
+USERS_CAN_DELETE=false  # Only admins can delete
+
+# Retention policy
+ENABLE_AUTO_DELETION=true
+DEFAULT_RETENTION_DAYS=90
+DELETION_MODE=audio_only
+
+# Audio compression (enabled by default)
+AUDIO_COMPRESS_UPLOADS=true
+AUDIO_CODEC=mp3
+AUDIO_BITRATE=128k
+
+# Speaker cleanup (preserve profiles by default)
+DELETE_ORPHANED_SPEAKERS=false
+
+# Video retention (keep video files for playback)
+VIDEO_RETENTION=false
+
+# Video passthrough (send raw video to ASR, for custom backends)
+# VIDEO_PASSTHROUGH_ASR=false
+
+# Concurrent uploads (default: 3)
+MAX_CONCURRENT_UPLOADS=3
+
+# Processing queue
+JOB_QUEUE_WORKERS=2
+JOB_MAX_RETRIES=3
+```
+
+After modifying environment variables, restart your Speakr instance for changes to take effect:
+```bash
+docker compose restart
+```
+
+---
+
+Next: [Default Prompts](prompts.md) →

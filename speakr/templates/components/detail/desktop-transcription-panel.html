@@ -1,0 +1,310 @@
+<!-- Desktop Transcription Panel (Left Column) -->
+<div id="leftMainColumn" class="flex flex-col overflow-hidden" style="width: 100%; border-right: none;">
+    <!-- Docked video, top-of-left-column slot (see _video-dock.html). -->
+    {% with dock_pos = 'left-top' %}{% include 'components/detail/_video-dock.html' %}{% endwith %}
+    <!-- Transcription header (design system v1).
+         Matches the right-rail tab-bar pattern: 40px tab strip with the
+         title on the left and contextual toggles + action icons on the
+         right. View mode is a single Bubble *toggle* (Simple is the
+         default; the toggle modifies that default), not a pair of tabs. -->
+    <div class="tabs-bar px-4">
+        <div class="tabs">
+            <span class="tab is-active" style="cursor: default;">
+                <i class="fas fa-file-text" style="font-size: 13px; opacity: 0.7;"></i>
+                <span v-text="t('transcription.title')"></span>
+            </span>
+        </div>
+        <div class="tabs-bar__actions">
+            <!-- Follow Player toggle (icon-only; label in tooltip) -->
+            <button v-if="processedTranscription.isJson && processedTranscription.hasDialogue"
+                    @click="toggleFollowPlayerMode"
+                    class="toggle"
+                    :class="{ 'is-on': followPlayerMode }"
+                    :title="followPlayerMode ? t('tooltips.followPlayerEnabled') : t('tooltips.followPlayerDisabled')">
+                <i class="fas fa-arrows-alt-v" style="font-size: 11px;"></i>
+            </button>
+
+            <!-- View mode: ONE toggle. Off = Simple (default), On = Bubble -->
+            <button v-if="processedTranscription.hasDialogue"
+                    @click="toggleTranscriptionViewMode"
+                    class="toggle"
+                    :class="{ 'is-on': transcriptionViewMode === 'bubble' }"
+                    :title="transcriptionViewMode === 'bubble' ? 'Switch to simple view' : 'Switch to bubble view'">
+                <i class="fas fa-comments" style="font-size: 11px;"></i>
+                <span v-text="t('transcription.bubble')"></span>
+            </button>
+
+            <!-- Copy -->
+            <button @click="copyTranscription"
+                    class="btn btn--icon"
+                    :title="t('tooltips.copyTranscript')">
+                <i class="fas fa-copy"></i>
+            </button>
+
+            <!-- locol_vocol: one-click download as TXT with the default template (no menu) -->
+            <button v-if="selectedRecording && selectedRecording.transcription"
+                    @click="transcriptDownloadFormat = 'txt'; downloadWithDefaultTemplate()"
+                    class="btn btn--icon"
+                    :title="t('tooltips.downloadTranscriptWithTemplate')">
+                <i class="fas fa-download"></i>
+            </button>
+
+            <!-- Edit -->
+            <button @click="openTranscriptionEditor"
+                    v-if="selectedRecording && selectedRecording.transcription"
+                    class="btn btn--icon"
+                    :title="t('tooltips.editTranscript')">
+                <i class="fas fa-pen"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Transcription Content -->
+    <div class="flex-1 overflow-y-auto p-4 relative">
+        <!-- Floating Processing Indicator -->
+        <div v-if="selectedRecording.status === 'PROCESSING'"
+             :class="['processing-indicator-floating', processingIndicatorMinimized ? 'minimized' : '']">
+            <template v-if="!processingIndicatorMinimized">
+                <div class="processing-indicator-content locol-progress">
+                    <div class="locol-progress__row">
+                        <i class="fas fa-spinner fa-spin text-[var(--text-accent)]"></i>
+                        <span class="text-sm text-[var(--text-secondary)]" v-text="t('help.processingTranscription')"></span>
+                        <span class="locol-progress__pct">${ transcriptionProgressInfo ? transcriptionProgressInfo.pct + '%' : '--%' }</span>
+                    </div>
+                    <div class="locol-progress__bar">
+                        <div class="locol-progress__fill" :style="{ width: (transcriptionProgressInfo ? transcriptionProgressInfo.pct : 0) + '%' }"></div>
+                    </div>
+                    <div class="locol-progress__stats">
+                        <span class="locol-progress__stat locol-progress__stat--chunk">${ (transcriptionProgressInfo && transcriptionProgressInfo.chunked) ? transcriptionProgressInfo.chunkText : '\u00a0' }</span>
+                        <span class="locol-progress__stat locol-progress__stat--time">${ t('cost.elapsed') } ${ transcriptionProgressInfo && transcriptionProgressInfo.elapsed ? transcriptionProgressInfo.elapsed : '--' }</span>
+                        <span class="locol-progress__stat locol-progress__stat--time">${ t('cost.remaining') } ${ transcriptionProgressInfo && transcriptionProgressInfo.remaining ? transcriptionProgressInfo.remaining : '--' }</span>
+                    </div>
+                </div>
+                <button @click="processingIndicatorMinimized = true"
+                        class="processing-indicator-minimize"
+                        :title="t('tooltips.minimize')">
+                    <i class="fas fa-chevron-up"></i>
+                </button>
+            </template>
+            <template v-else>
+                <button @click="processingIndicatorMinimized = false"
+                        class="processing-indicator-expand"
+                        :title="t('help.processingTranscription')">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </button>
+            </template>
+        </div>
+
+        <!-- No transcription state (only show if not processing and no transcription) -->
+        <div v-if="selectedRecording.status !== 'PROCESSING' && !selectedRecording.transcription" class="text-center py-8">
+            <i class="fas fa-file-text text-3xl text-[var(--text-muted)] mb-3"></i>
+            <p class="text-[var(--text-muted)]" v-text="t('transcription.noTranscription')"></p>
+        </div>
+
+        <!-- Error Display (when transcription is an error message) -->
+        <div v-if="processedTranscription.isError" class="error-display-container">
+            <div :class="[
+                'rounded-lg p-5 border',
+                processedTranscription.error.type === 'size_limit' ? 'bg-amber-500/10 border-amber-500/30' :
+                processedTranscription.error.type === 'timeout' ? 'bg-orange-500/10 border-orange-500/30' :
+                processedTranscription.error.type === 'auth' ? 'bg-red-500/10 border-red-500/30' :
+                processedTranscription.error.type === 'rate_limit' ? 'bg-yellow-500/10 border-yellow-500/30' :
+                processedTranscription.error.type === 'connection' ? 'bg-blue-500/10 border-blue-500/30' :
+                processedTranscription.error.type === 'service_error' ? 'bg-purple-500/10 border-purple-500/30' :
+                'bg-gray-500/10 border-gray-500/30'
+            ]">
+                <div class="flex items-start gap-4">
+                    <div :class="[
+                        'flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center',
+                        processedTranscription.error.type === 'size_limit' ? 'bg-amber-500/20' :
+                        processedTranscription.error.type === 'timeout' ? 'bg-orange-500/20' :
+                        processedTranscription.error.type === 'auth' ? 'bg-red-500/20' :
+                        processedTranscription.error.type === 'rate_limit' ? 'bg-yellow-500/20' :
+                        processedTranscription.error.type === 'connection' ? 'bg-blue-500/20' :
+                        processedTranscription.error.type === 'service_error' ? 'bg-purple-500/20' :
+                        'bg-gray-500/20'
+                    ]">
+                        <i :class="[
+                            'fas text-xl',
+                            processedTranscription.error.icon,
+                            processedTranscription.error.type === 'size_limit' ? 'text-amber-500' :
+                            processedTranscription.error.type === 'timeout' ? 'text-orange-500' :
+                            processedTranscription.error.type === 'auth' ? 'text-red-500' :
+                            processedTranscription.error.type === 'rate_limit' ? 'text-yellow-500' :
+                            processedTranscription.error.type === 'connection' ? 'text-blue-500' :
+                            processedTranscription.error.type === 'service_error' ? 'text-purple-500' :
+                            'text-gray-500'
+                        ]"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 :class="[
+                            'text-lg font-semibold mb-2',
+                            processedTranscription.error.type === 'size_limit' ? 'text-amber-600 dark:text-amber-400' :
+                            processedTranscription.error.type === 'timeout' ? 'text-orange-600 dark:text-orange-400' :
+                            processedTranscription.error.type === 'auth' ? 'text-red-600 dark:text-red-400' :
+                            processedTranscription.error.type === 'rate_limit' ? 'text-yellow-600 dark:text-yellow-400' :
+                            processedTranscription.error.type === 'connection' ? 'text-blue-600 dark:text-blue-400' :
+                            processedTranscription.error.type === 'service_error' ? 'text-purple-600 dark:text-purple-400' :
+                            'text-gray-600 dark:text-gray-400'
+                        ]">
+                            ${processedTranscription.error.title}
+                        </h3>
+                        <p class="text-[var(--text-primary)] mb-3">
+                            ${processedTranscription.error.message}
+                        </p>
+                        <div v-if="processedTranscription.error.guidance" class="flex items-start gap-2 text-sm text-[var(--text-secondary)] bg-[var(--bg-tertiary)]/50 rounded-lg p-3">
+                            <i class="fas fa-lightbulb text-yellow-500 mt-0.5 flex-shrink-0"></i>
+                            <span>${processedTranscription.error.guidance}</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Action buttons -->
+                <div class="mt-4 flex items-center gap-3 pt-4 border-t border-[var(--border-secondary)]">
+                    <button @click="reprocessTranscription(selectedRecording.id)"
+                            v-if="selectedRecording.can_edit !== false"
+                            class="px-4 py-2 bg-[var(--bg-accent)] hover:bg-[var(--bg-accent-hover)] text-white rounded-lg transition-colors flex items-center gap-2">
+                        <i class="fas fa-redo-alt"></i>
+                        <span v-text="t('buttons.reprocessTranscription')"></span>
+                    </button>
+                    <details class="text-xs w-full">
+                        <summary class="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+                            ${ t('transcription.technicalDetails') }
+                        </summary>
+                        <pre v-if="processedTranscription.error.technical" class="mt-2 p-3 bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-muted)] text-xs max-h-32 overflow-auto whitespace-pre-wrap break-all w-full">${processedTranscription.error.technical}</pre>
+                    </details>
+                </div>
+            </div>
+        </div>
+
+        <!-- Speaker Legend (for dialogue transcriptions in bubble view only) -->
+        <div v-if="!processedTranscription.isError && processedTranscription.hasDialogue && processedTranscription.speakers.length > 0 && transcriptionViewMode === 'bubble'"
+             :class="['speaker-legend', legendExpanded ? 'expanded' : '']">
+            <div class="speaker-legend-header" @click="legendExpanded = !legendExpanded">
+                <div class="speaker-legend-title">
+                    <i class="fas fa-users"></i>
+                    <span v-text="t('help.speakers')"></span>
+                    <span class="speaker-count-indicator">(${processedTranscription.speakers.length})</span>
+                </div>
+                <i class="fas fa-chevron-down speaker-legend-toggle"></i>
+            </div>
+            <div class="speaker-legend-content">
+                <div v-for="(speaker, index) in processedTranscription.speakers"
+                     :key="`${selectedRecording.id}-speaker-legend-${index}`"
+                     :class="['speaker-legend-item', speaker.color]"
+                     style="cursor: text;"
+                     :title="t('transcription.doubleClickRename')"
+                     @dblclick.stop="startInlineSpeakerRename(speaker.id)">
+                    <input v-if="inlineRenameRowKey === `legend:${speaker.id}`"
+                           :ref="el => inlineRenameInputRef = el"
+                           v-model="inlineRenameValue"
+                           class="speaker-name speaker-inline-rename"
+                           @keydown.enter="onInlineRenameEnter"
+                           @keydown.esc.prevent="cancelInlineSpeakerRename"
+                           @blur="onInlineRenameBlur"
+                           @click.stop @dblclick.stop>
+                    <span v-else class="speaker-name">${speaker.name}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transcription Display (hide if it's an error) -->
+        <div v-if="selectedRecording.transcription && !processedTranscription.isError">
+            <!-- Simple View -->
+            <div v-if="!processedTranscription.hasDialogue || transcriptionViewMode === 'simple'"
+                 class="transcription-simple-view">
+                <!-- Speaker runs (consecutive same-speaker segments
+                     grouped into one container) so the sticky speaker
+                     tablet at the top of each run sticks for the WHOLE
+                     run, not just the first segment. -->
+                <div v-if="processedTranscription.hasDialogue">
+                    <div v-for="(run, runIndex) in processedTranscription.simpleSegmentRuns"
+                         :key="`run-${runIndex}-${run.startTime}`"
+                         class="speaker-run">
+                        <div v-if="showTimestampsSimpleView"
+                             :class="['speaker-tablet-group', run.color]">
+                            <span class="speaker-tablet-time">${ formatTimestamp(run.startTime) }</span>
+                            <input v-if="inlineRenameRowKey === `run:${run.runOffset}`"
+                                   :ref="el => inlineRenameInputRef = el"
+                                   v-model="inlineRenameValue"
+                                   class="speaker-tablet-name speaker-inline-rename"
+                                   @keydown.enter="onInlineRenameEnter"
+                                   @keydown.esc.prevent="cancelInlineSpeakerRename"
+                                   @blur="onInlineRenameBlur"
+                                   @click.stop @dblclick.stop>
+                            <span v-else class="speaker-tablet-name" style="cursor: text;"
+                                  :title="t('transcription.doubleClickRename')"
+                                  @dblclick.stop="startInlineSpeakerRename(run.speakerId, `run:${run.runOffset}`)">${run.speaker}</span>
+                        </div>
+                        <input v-else-if="inlineRenameRowKey === `run:${run.runOffset}`"
+                               :ref="el => inlineRenameInputRef = el"
+                               v-model="inlineRenameValue"
+                               :class="['speaker-tablet', 'speaker-inline-rename', run.color]"
+                               @keydown.enter="onInlineRenameEnter"
+                               @keydown.esc.prevent="cancelInlineSpeakerRename"
+                               @blur="onInlineRenameBlur"
+                               @click.stop @dblclick.stop>
+                        <div v-else :class="['speaker-tablet', run.color]" style="cursor: text;"
+                             :title="t('transcription.doubleClickRename')"
+                             @dblclick.stop="startInlineSpeakerRename(run.speakerId, `run:${run.runOffset}`)">
+                            ${run.speaker}
+                        </div>
+                        <div v-for="(segment, segIndex) in run.segments"
+                             :key="`seg-${segment.originalIndex}-${segment.startTime}`"
+                             :class="['speaker-segment', { 'active-playing-segment': currentPlayingSegmentIndex === segment.originalIndex }]"
+                             @click="seekAudioFromEvent"
+                             @dblclick.stop="seekAndPlayFromEvent"
+                             :title="t('transcription.doubleClickPlay')"
+                             :data-start-time="segment.startTime"
+                             :data-segment-index="segment.originalIndex">
+                            <div class="speaker-text">
+                                ${segment.sentence}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else>
+                    <div v-if="processedTranscription.simpleSegments && processedTranscription.simpleSegments.length > 0">
+                        <div v-for="(segment, index) in processedTranscription.simpleSegments"
+                             :key="`seg-${index}-${segment.startTime}`"
+                             :class="['transcript-segment cursor-pointer hover:bg-[var(--bg-accent-hover)] p-2 rounded transition-colors', { 'active-playing-segment': currentPlayingSegmentIndex === index }]"
+                             @click="seekAudioFromEvent"
+                             @dblclick.stop="seekAndPlayFromEvent"
+                             :title="t('transcription.doubleClickPlay')"
+                             :data-start-time="segment.startTime"
+                             :data-segment-index="index">
+                            <span v-if="showTimestampsSimpleView"
+                                  class="speaker-segment-timestamp speaker-segment-timestamp--inline">
+                                ${ formatTimestamp(segment.startTime) }
+                            </span>${segment.sentence}
+                        </div>
+                    </div>
+                    <div v-else class="whitespace-pre-wrap bidi-auto">
+                        ${processedTranscription.content}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bubble View -->
+            <div v-else-if="transcriptionViewMode === 'bubble'"
+                 class="transcription-with-speakers">
+                <template v-for="(row, rowIndex) in processedTranscription.bubbleRows" :key="`${selectedRecording.id}-bubble-row-${rowIndex}`">
+                    <div :class="['bubble-row', row.isMe ? 'speaker-me' : '']">
+                        <div v-for="(bubble, bubbleIndex) in row.bubbles"
+                             :key="`bubble-${rowIndex}-${bubbleIndex}-${bubble.startTime}`"
+                             :class="['speaker-bubble', bubble.color, row.isMe ? 'speaker-me' : '', { 'active-playing-segment': currentPlayingSegmentIndex === getBubbleGlobalIndex(rowIndex, bubbleIndex) }]"
+                             @click="seekAudioFromEvent"
+                             :data-start-time="bubble.startTime"
+                             :data-segment-index="getBubbleGlobalIndex(rowIndex, bubbleIndex)">
+                            <div class="speaker-bubble-content">
+                                ${bubble.sentence}
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Docked video, bottom-of-left-column slot (see _video-dock.html). -->
+    {% with dock_pos = 'left-bottom' %}{% include 'components/detail/_video-dock.html' %}{% endwith %}
+</div>

@@ -1,0 +1,148 @@
+{# Page header for the pages outside the main app (account, admin, group
+   management). The right side is components/header-controls.html, the same
+   template the main app's header uses, driven here by the small Vue app in
+   static/js/global-header.js, so every page has the same controls and menu.
+
+   Usage:
+       set page_label = 'Account'            (fallback text)
+       set page_label_key = 'nav.account'    (i18n key for the label)
+       include 'components/page-header.html'
+#}
+<header id="global-header" class="bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] px-3 sm:px-4 py-2 flex items-center justify-between flex-shrink-0 z-50 gap-3 sticky top-0" style="min-height: 56px;">
+    <!-- Left: Speakr logo + name + page label -->
+    <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+        <a href="{{ url_for('recordings.index') }}" class="flex items-center gap-2 sm:gap-3 min-w-0 hover:opacity-80 transition-opacity">
+            <img src="{{ url_for('static', filename='img/icon-64.png') }}" srcset="{{ url_for('static', filename='img/icon-64.png') }} 1x, {{ url_for('static', filename='img/icon-128.png') }} 2x" alt="Speakr" class="app-logo w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0">
+            <h1 class="text-lg sm:text-xl font-bold text-[var(--text-primary)] truncate">Speakr</h1>
+        </a>
+        {% if page_label %}
+        <span class="text-[var(--text-muted)] hidden sm:inline" aria-hidden="true">/</span>
+        {% if page_label_key %}
+        <span class="t-meta hidden sm:inline" v-text="t('{{ page_label_key }}')"></span>
+        {% else %}
+        <span class="t-meta hidden sm:inline">{{ page_label }}</span>
+        {% endif %}
+        {% endif %}
+    </div>
+
+    <!-- Right: the same controls as the main app's header -->
+    <div class="flex items-center gap-1 sm:gap-2 flex-shrink-0 global-header-controls">
+        {% include 'components/header-controls.html' %}
+    </div>
+</header>
+<style>
+    /* Until the header app mounts, the controls hold their space but stay
+       invisible, so raw template markup never shows. */
+    #global-header:not([data-v-app]) .global-header-controls { visibility: hidden; }
+</style>
+<script type="module" src="{{ url_for('static', filename='js/global-header.js') }}"></script>
+
+<script>
+// Tabs scroller — attaches to any element marked [data-tabs-scroller]
+// that wraps a .tabs container. Shows/hides left/right chevron buttons
+// based on whether the tab strip can scroll further in that direction;
+// click scrolls by 240px; wheel-over-tabs maps vertical wheel to
+// horizontal scroll. Idempotent on multiple init calls.
+(function () {
+    function initScroller(root) {
+        if (root.dataset.tabsScrollerInit === '1') return;
+        root.dataset.tabsScrollerInit = '1';
+        var tabs = root.querySelector('.tabs');
+        var left = root.querySelector('.tabs-scroller__nav--left');
+        var right = root.querySelector('.tabs-scroller__nav--right');
+        if (!tabs || !left || !right) return;
+
+        function update() {
+            var maxScroll = tabs.scrollWidth - tabs.clientWidth;
+            left.classList.toggle('is-visible', tabs.scrollLeft > 4);
+            right.classList.toggle('is-visible', tabs.scrollLeft < maxScroll - 4);
+        }
+
+        left.addEventListener('click', function () {
+            tabs.scrollBy({ left: -240, behavior: 'smooth' });
+        });
+        right.addEventListener('click', function () {
+            tabs.scrollBy({ left: 240, behavior: 'smooth' });
+        });
+        tabs.addEventListener('scroll', update, { passive: true });
+
+        // Wheel-over-tabs: map vertical wheel to horizontal scroll so
+        // users can flick through the strip without using the buttons.
+        tabs.addEventListener('wheel', function (e) {
+            // Only intercept if the dominant axis is vertical and
+            // there's somewhere horizontal to go.
+            if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+            var maxScroll = tabs.scrollWidth - tabs.clientWidth;
+            if (maxScroll <= 0) return;
+            if ((e.deltaY > 0 && tabs.scrollLeft >= maxScroll) ||
+                (e.deltaY < 0 && tabs.scrollLeft <= 0)) return;
+            e.preventDefault();
+            tabs.scrollLeft += e.deltaY;
+        }, { passive: false });
+
+        // ----- Reactive resize detection. The brittle case the
+        // original implementation missed: ResizeObserver on the .tabs
+        // container only fires when the CONTAINER box changes, not
+        // when the SCROLLWIDTH changes because individual tab buttons
+        // grow (which happens whenever FontAwesome glyphs render
+        // late, web fonts load late, or i18n translations swap in
+        // longer strings). To catch all those, we also observe every
+        // direct child of .tabs — each one resizes when its text
+        // metrics change, fires the observer, runs update().
+        // MutationObserver covers the rare case where the tab list
+        // itself gains or loses children at runtime.
+        if (window.ResizeObserver) {
+            const ro = new ResizeObserver(update);
+            ro.observe(tabs);
+            Array.from(tabs.children).forEach(child => ro.observe(child));
+
+            if (window.MutationObserver) {
+                new MutationObserver((muts) => {
+                    muts.forEach(m => {
+                        m.addedNodes.forEach(n => {
+                            if (n.nodeType === 1) ro.observe(n);
+                        });
+                    });
+                    update();
+                }).observe(tabs, { childList: true });
+            }
+        } else {
+            window.addEventListener('resize', update);
+        }
+
+        // Initial measure — multiple cold-load nets so at least one
+        // catches a correct scrollWidth even on slow devices:
+        //   - rAF: ASAP after current frame's layout
+        //   - window.load: all resources finished
+        //   - document.fonts.ready: text reflowed to its final metrics
+        //   - polling fallback for the first 3 seconds for the rare
+        //     case where none of the above fires at the right moment
+        //     (e.g. lazy-loading icons that don't trigger font events)
+        requestAnimationFrame(update);
+        if (document.readyState !== 'complete') {
+            window.addEventListener('load', update);
+        }
+        if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+            document.fonts.ready.then(update);
+        }
+        // Polling fallback: tick every 100ms for the first 3 seconds.
+        // Each tick is cheap (a width comparison + class toggle) and
+        // the loop self-terminates. This catches any timing window
+        // the events above missed.
+        let pollTicks = 30;
+        const pollTimer = setInterval(() => {
+            update();
+            if (--pollTicks <= 0) clearInterval(pollTimer);
+        }, 100);
+    }
+
+    function initAll() {
+        document.querySelectorAll('[data-tabs-scroller]').forEach(initScroller);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAll);
+    } else {
+        initAll();
+    }
+})();
+</script>

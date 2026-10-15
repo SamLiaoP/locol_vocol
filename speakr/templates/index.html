@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <!-- interactive-widget=resizes-content: on Android Chrome the on-screen
+         keyboard resizes the layout so the UI fits the space above it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    {% include 'includes/theme_bootstrap.html' %}
+    <script>
+      // Keyboard-safe viewport. The on-screen keyboard shrinks the VISUAL
+      // viewport but not the LAYOUT viewport, so a 100vh/100% shell overflows
+      // and content scrolls off-screen (worst on iOS, which ignores
+      // interactive-widget). Mirror the visible height into --app-height; the
+      // app shell (#app) is sized off it so it always fits the space above the
+      // keyboard, and inner panes scroll instead of the whole page.
+      (function () {
+        var vv = window.visualViewport, root = document.documentElement;
+        var baseline = 0, lastH = -1, kbTimer = null;
+
+        function apply() {
+          var h = vv ? vv.height : window.innerHeight;
+          // Mirror the visible height into --app-height so the shell (#app) fits
+          // the space above the keyboard and inner panes scroll, instead of the
+          // whole page (worst on iOS, which ignores interactive-widget).
+          root.style.setProperty('--app-height', h + 'px');
+
+          // Skip the keyboard check when only the scroll offset changed (height
+          // is unchanged) — the keyboard state can't have changed.
+          if (h === lastH) return;
+          lastH = h;
+
+          // Detect keyboard visibility from the VISIBLE viewport, not focus.
+          // Android's back-gesture closes the keyboard WITHOUT blurring the
+          // field, so a focus-based signal would leave the player/nav hidden
+          // until the next tap. The visual viewport shrinks while the keyboard
+          // is up and grows back the instant it closes by ANY means, so it's
+          // the reliable signal. Track the tallest height seen as the
+          // "no keyboard" baseline; a drop of >150px means the keyboard is up.
+          // When set, CSS hides the mobile player + bottom nav (not useful while
+          // typing and only steal the limited space above the keyboard).
+          if (h > baseline) baseline = h;
+          if (baseline - h > 150) {
+            clearTimeout(kbTimer);
+            root.classList.add('keyboard-open');
+          } else {
+            // Debounce removal so a Send tap that briefly blurs+refocuses the
+            // field (closing then reopening the keyboard) doesn't flicker the
+            // player/nav or reflow the layout mid-tap.
+            clearTimeout(kbTimer);
+            kbTimer = setTimeout(function () { root.classList.remove('keyboard-open'); }, 250);
+          }
+        }
+
+        apply();
+        if (vv) { vv.addEventListener('resize', apply); vv.addEventListener('scroll', apply); }
+        window.addEventListener('orientationchange', function () { baseline = 0; setTimeout(apply, 300); });
+      })();
+    </script>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="app-version" content="{{ app_version }}">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+    <title>Speakr - Audio Transcription & Summarization</title>
+    <!-- All dependencies bundled locally for offline support -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/easymde.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/icon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/icon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/icon-180x180.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#2563eb">
+    <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
+         <head> so that, as with the former runtime build, they follow the page's
+         own stylesheets in the cascade. -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <!-- Scripts after every stylesheet, so that no page is painted while a
+         script blocks the parser before the stylesheets are known. -->
+    {% include 'includes/loading_overlay.html' %}
+    <script src="{{ url_for('static', filename='vendor/js/vue.global.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/marked.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/purify.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/markdown-safe.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/easymde.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/timezone-sync.js') }}" defer></script>
+</head>
+<body class="h-full bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-300">
+    <div id="app" v-cloak
+         data-use-asr-endpoint="{{ use_asr_endpoint }}"
+         data-connector-supports-diarization="{{ connector_supports_diarization }}"
+         data-connector-supports-speaker-count="{{ connector_supports_speaker_count }}"
+         data-connector-supports-exact-speaker-count="{{ connector_supports_exact_speaker_count }}"
+         data-speaker-count-mode="{{ current_user.speaker_count_mode or 'range' if current_user.is_authenticated else 'range' }}"
+         data-connector-supports-hotwords="{{ connector_supports_hotwords }}"
+         data-connector-supports-initial-prompt="{{ connector_supports_initial_prompt }}"
+         data-enable-audio-removed-filter="{{ enable_audio_removed_filter }}"
+         data-enable-internal-sharing="{{ enable_internal_sharing }}"
+         data-current-user-name="{{ (current_user.name or current_user.username) if current_user.is_authenticated else '' }}"
+         data-user-language="{{ user_language }}"
+         data-show-timestamps-simple-view="{{ 'True' if (current_user.is_authenticated and current_user.show_timestamps_simple_view) else 'False' }}"
+         data-editor-autosave="{{ 'True' if (current_user.is_authenticated and current_user.editor_autosave) else 'False' }}"
+         data-audio-player-position="{{ (current_user.audio_player_position or 'bottom') if current_user.is_authenticated else 'bottom' }}"
+         data-server-recording-chunks="{{ 'True' if server_recording_chunks_enabled else 'False' }}"
+         data-recording-max-hours="{{ recording_max_hours }}"
+         data-recording-chunk-seconds="{{ recording_chunk_seconds }}"
+         data-recording-video-kbps="{{ recording_video_kbps }}"
+         class="h-full flex flex-col opacity-0 transition-opacity duration-500">
+
+        <!-- Header -->
+        {% include 'components/header.html' %}
+
+        <div class="flex-1 flex overflow-hidden relative">
+            <!-- Sidebar (renders its own mobile backdrop as its first element) -->
+            {% include 'components/sidebar.html' %}
+
+            <!-- Main Content Area -->
+            <main :class="['flex-1 flex flex-col overflow-hidden main-content', !isSidebarCollapsed && !isMobileScreen ? 'sidebar-open' : '']">
+                <!-- Custom Banner -->
+                {% include 'components/banner.html' %}
+
+                <!-- Recording View -->
+                {% include 'components/recording-view.html' %}
+
+                <!-- Detail View -->
+                {% include 'components/detail-view.html' %}
+            </main>
+        </div>
+
+        <!-- Upload View — now a real modal so the underlying view (list
+             or detail) stays visible behind the backdrop. Lives outside
+             <main> alongside the other modals so it overlays the whole
+             chrome. -->
+        {% include 'components/upload-view.html' %}
+
+        <!-- Upload Progress Popup -->
+        {% include 'components/progress-popup.html' %}
+
+        <!-- Modals -->
+        {% include 'modals/edit-modal.html' %}
+        {% include 'modals/delete-modal.html' %}
+        {% include 'modals/delete-audio-modal.html' %}
+        {% include 'modals/edit-tags-modal.html' %}
+        {% include 'modals/datetime-picker-modal.html' %}
+        {% include 'modals/shares-list-modal.html' %}
+        {% include 'modals/reset-modal.html' %}
+        {% include 'modals/reprocess-modal.html' %}
+        {% include 'modals/speaker-modal.html' %}
+        {% include 'modals/add-speaker-modal.html' %}
+        {% include 'modals/edit-text-modal.html' %}
+        {% include 'modals/text-editor-modal.html' %}
+        {% include 'modals/asr-editor-modal.html' %}
+        {% include 'modals/customize-summary-prompt-modal.html' %}
+        {% include 'modals/edit-speakers-modal.html' %}
+        {% include 'modals/edit-participants-modal.html' %}
+        {% include 'modals/color-scheme-modal.html' %}
+        {% include 'modals/system-audio-help-modal.html' %}
+        {% include 'modals/recording-disclaimer-modal.html' %}
+        {% include 'modals/upload-disclaimer-modal.html' %}
+        {% include 'modals/recording-recovery-modal.html' %}
+        {% include 'modals/unified-share-modal.html' %}
+        {% include 'modals/share-delete-modal.html' %}
+        {% include 'modals/duplicates-modal.html' %}
+        {% include 'modals/global-error.html' %}
+        {% include 'modals/toast-container.html' %}
+
+        <!-- Bulk Operations Modals -->
+        {% include 'modals/bulk-delete-modal.html' %}
+        {% include 'modals/bulk-tag-modal.html' %}
+        {% include 'modals/bulk-reprocess-modal.html' %}
+        {% include 'modals/bulk-merge-modal.html' %}
+    </div>
+
+    <!-- Shared tag/folder editor modals (outside the Vue root; driven by organizer-modals.js) -->
+    {% include 'includes/organizer_modals.html' %}
+
+    <!-- CSRF Token Management -->
+    <script src="{{ url_for('static', filename='js/csrf-refresh.js') }}"></script>
+
+    <!-- i18n System -->
+    {% include 'includes/i18n_bootstrap.html' %}
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
+
+    <!-- Initialize i18n immediately with fallback -->
+    <script>
+        // Ensure i18n is initialized before Vue app
+        (async function() {
+            const startTime = Date.now();
+            const maxWait = 3000; // Max 3 seconds for i18n to load
+
+            try {
+                if (window.i18n && window.i18n.init) {
+                    const userLang = localStorage.getItem('preferredLanguage') || '{{ user_language }}' || 'en';
+
+                    // Race between i18n init and timeout
+                    await Promise.race([
+                        window.i18n.init(userLang),
+                        new Promise((resolve) => setTimeout(resolve, maxWait))
+                    ]);
+
+                    const elapsed = Date.now() - startTime;
+                    console.log('i18n initialized in', elapsed, 'ms');
+                } else {
+                    console.warn('i18n not available, continuing without translations');
+                }
+            } catch (error) {
+                console.error('Failed to initialize i18n:', error);
+                // Continue anyway - app will use fallback translations
+            }
+
+            // Hide initial loader after i18n attempt
+            const loader = document.getElementById('loader');
+            if (loader) {
+                loader.style.display = 'none';
+            }
+        })();
+    </script>
+
+    <!-- Service Worker Registration handled by app.modular.js -->
+
+    <!-- Shared ASR language list (feeds Vue dropdowns and the organizer modals) -->
+    <script src="{{ url_for('static', filename='js/asr-languages.js') }}"></script>
+
+    <!-- Shared tag/folder modal driver (standalone creation mode) -->
+    <script src="{{ url_for('static', filename='js/organizer-modals.js') }}"></script>
+
+    <!-- Vue.js Application Script -->
+    <script type="module" src="{{ url_for('static', filename='js/app.modular.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# secrets / runtime data
+.env
+uploads/
+instance/
+speakr/instance/
+speakr/uploads/
+
+# meeting transcripts kept locally only (customer content)
+*.txt
+!speakr/requirements*.txt
+!speakr/constraints.txt
+!speakr/**/*.txt
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

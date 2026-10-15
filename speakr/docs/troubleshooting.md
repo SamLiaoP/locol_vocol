@@ -1,0 +1,300 @@
+# Troubleshooting
+
+When something goes wrong with Speakr, this guide helps you identify and resolve common issues quickly. Most problems fall into a few categories - [installation issues](getting-started/installation.md), transcription failures, performance problems, or feature-specific quirks. Also check the [FAQ](faq.md) for common questions. Understanding where to look and what to check saves hours of frustration.
+
+## Installation and Setup Issues
+
+### Container Won't Start
+
+When your Docker container refuses to start or immediately exits, the problem usually lies in your configuration. Check your [environment file](getting-started.md#step-3-configure-your-transcription-service) first - a single typo in API keys or mismatched quotes can prevent startup. Review the [installation guide](getting-started/installation.md) for proper setup. Run `docker compose logs app` to see the actual error messages. Common culprits include port conflicts (another service using 8899), missing volume mounts, or incorrect file permissions on your data directory.
+
+If you see database connection errors, ensure your database file has proper permissions. The container runs as a specific user and needs read/write access to the data directories. On Linux systems, you might need to adjust ownership with `chown -R 1000:1000 ./uploads ./instance`.
+
+### "table user_new already exists" on Startup (Fixed in v0.10.5-alpha)
+
+Installations upgraded from a version older than v0.5.9-alpha may log `Could not migrate password column to nullable (may cause issues with SSO): table user_new already exists` on every startup, repeated once per worker process. The application otherwise runs normally, and no data is lost.
+
+The cause was a migration that rebuilt the whole user table to make one column nullable for SSO support. On those older databases the copy step failed, and because SQLite's Python driver does not wrap schema changes in a transaction, the temporary `user_new` table survived and blocked every later attempt. The practical consequence is that `user.password` stayed `NOT NULL`, so accounts without a local password, meaning SSO accounts, could not be created.
+
+Upgrade to v0.10.5-alpha or later. The migration now alters only the column it needs and removes the leftover table for you. **Do not delete `user_new` manually on an older version.** Doing so lets the old migration complete, and it rebuilds the user table from a column list frozen years earlier, discarding later settings such as token budgets, verification state and transcription hints.
+
+### Can't Access the Web Interface
+
+When Speakr starts successfully but you can't reach the web interface, network configuration is usually the issue. First, verify the container is actually running with `docker ps`. Check that port 8899 is properly mapped - the docker-compose file should show `"8899:8899"` in the ports section.
+
+Firewall rules often block access, especially on cloud servers. Ensure port 8899 is open in your firewall, security groups (AWS), or network policies. If accessing from another machine, remember that `localhost` won't work - use the server's actual IP address or hostname.
+
+### Actions Fail Behind a Reverse Proxy with a Referer or Host Error
+
+Over HTTPS, Speakr's CSRF protection requires the browser's Referer header to match the host the server receives. If every action that changes something (reprocessing, resetting a status, saving) fails with HTTP 400 and a message naming the Referer header or two different host names, the reverse proxy is the cause. The server log shows a matching `CSRF validation failed` warning with both hosts.
+
+Two proxy settings produce this. The proxy may strip the Referer header, either directly or through a `Referrer-Policy: no-referrer` header it adds; use `strict-origin-when-cross-origin` or leave the header to Speakr. Alternatively, the proxy may forward a different Host header than the address in the browser (for example the container name); forward the original Host (in Nginx, `proxy_set_header Host $host;`) or set `X-Forwarded-Host`, and set `TRUSTED_PROXY_HOPS` to the number of proxies in front of Speakr. Reloading the page does not help with either, because every request fails the same check.
+
+### Admin Login Fails
+
+If you can't log in with your [admin credentials](getting-started.md#step-4-configure-admin-account), first verify you're using the exact username and password from your environment file. For user management issues, see the [admin guide](admin-guide/user-management.md). These are case-sensitive and must match exactly. Check the Docker logs for admin user creation messages - you should see "Admin user created successfully" during first startup.
+
+Sometimes the admin user creation fails silently if the password doesn't meet requirements. Ensure your admin password is at least 8 characters long. If the admin user wasn't created, you might need to remove the database file and restart the container to trigger initialization again.
+
+## Transcription Problems
+
+### Transcription Never Starts
+
+When recordings stay in "pending" or "queued" status indefinitely, check these common causes:
+
+**QUEUED status**: Recordings show "Queued" when waiting for an available worker. By default, 2 workers process jobs concurrently. If many recordings are queued, they'll be processed in fair round-robin order across users - no single user can monopolize the queue. Increase `JOB_QUEUE_WORKERS` in your environment file for faster throughput.
+
+**Background processor stopped**: Check the logs for error messages about the [transcription service](features.md#multi-engine-support). Monitor processing status in the [vector store](admin-guide/vector-store.md) admin panel.
+
+**API key issues**: The most common cause - verify your OpenAI or OpenRouter API key is valid and has available credits.
+
+**Network connectivity**: The container needs to reach external API endpoints. If you're behind a corporate proxy, you'll need to configure proxy settings in your Docker environment.
+
+### Transcription Fails Immediately
+
+Quick failures usually indicate API authentication problems. Double-check your API keys in the environment file. Remember that OpenAI and OpenRouter use different key formats. OpenAI keys start with "sk-" while OpenRouter keys look different. Ensure you're using the right key for your configured service.
+
+API rate limits or insufficient credits also cause immediate failures. Log into your API provider's dashboard to check your usage and limits. Some API plans have restrictive rate limits that Speakr might exceed with large files.
+
+### ASR Endpoint Returns 405 or 404 Errors
+
+If you're getting "405 Method Not Allowed" or "404 Not Found" errors with the Whisper ASR webservice, check your ASR_BASE_URL configuration. The URL should not include trailing comments or descriptions - remove anything after the # symbol in your environment file. For the Whisper ASR webservice, use just the base URL like `http://whisper-asr:9000` without `/asr` at the end.
+
+When using Docker Compose, always use container names rather than IP addresses for service communication. Instead of `http://192.168.1.132:9000`, use `http://whisper-asr-webservice:9000` where `whisper-asr-webservice` is your container name.
+
+### Poor Transcription Quality
+
+Transcription accuracy depends heavily on audio quality. Background noise, multiple overlapping speakers, or poor microphone placement all degrade results. The AI models work best with clear, single-speaker audio or well-separated multiple speakers.
+
+Language mismatches cause poor results too. If you've set a specific transcription language in settings but upload audio in a different language, accuracy suffers. Either set the correct language or leave it blank for auto-detection.
+
+For domain-specific terminology, brand names, or acronyms that keep getting misspelled, use the [custom vocabulary (hotwords) and initial prompt](features.md#custom-vocabulary--transcription-hints) features. Set these per-upload in Advanced ASR Options, or configure them on your tags, folders, or user defaults for automatic application. See the [FAQ entry](faq.md#certain-specialized-words-dont-get-transcribed-properly-how-do-i-fix-this) for practical guidance.
+
+For recordings with multiple speakers, using the [ASR endpoint with speaker diarization](features.md#speaker-diarization) dramatically improves usability. Learn how to [identify speakers](user-guide/transcripts.md#speaker-identification) after transcription, even if the raw transcription accuracy is similar.
+
+### "Format Not Recognised" Errors
+
+If your transcription service returns "format not recognised" or similar codec errors, your service may not support certain audio formats that Speakr considers supported by default.
+
+This commonly occurs with:
+
+- **vLLM-hosted Whisper instances** that don't support Opus codec
+- **Self-hosted ASR services** with limited codec support
+- **WebM recordings** (which typically use Opus audio)
+
+**Solution:** Add unsupported codecs to your `.env` file:
+
+```bash
+# Exclude codecs your service doesn't support
+AUDIO_UNSUPPORTED_CODECS=opus
+
+# Multiple codecs can be excluded
+AUDIO_UNSUPPORTED_CODECS=opus,vorbis
+```
+
+Files using these codecs will be automatically converted to your target format (MP3 by default) before transcription. See the [audio compression settings](getting-started/installation.md#audio-compression) for more details.
+
+### Chinese Transcription Issues
+
+For [Chinese language transcription](features.md#language-support), model selection is critical. See the [FAQ on language support](faq.md#can-speakr-transcribe-languages-other-than-english) for more details.
+
+**Important**: Distil models (like distil-large-v3) do not support Chinese transcription properly. Even when you set the language to "zh", these models may recognize Chinese audio as English and produce incorrect output. Always use the full large-v3 model or similar non-distilled models for Chinese content. If you're getting English transcription for Chinese audio or romanized output instead of Chinese characters, switch from a distil model to large-v3.
+
+### Summary Language Doesn't Match Preference
+
+If [summaries](features.md#automatic-summarization) revert to English when you click "Reprocess Summary" despite having [language preferences](user-guide/settings.md#language-preferences) set, this might be a model limitation. Configure [custom prompts](admin-guide/prompts.md) to enforce language requirements. Some models like Qwen3-30B don't always follow language instructions correctly. Try using a different model that better respects language directives, or ensure your custom prompt explicitly specifies the output language.
+
+## Performance Issues
+
+### Slow Transcription Processing
+
+Large audio files naturally take longer to process, but excessive delays indicate problems. Check your [server resources](getting-started.md#prerequisites) and review [system statistics](admin-guide/statistics.md) for performance metrics - Speakr needs adequate CPU and RAM, especially when processing multiple recordings simultaneously. The `docker stats` command shows current resource usage.
+
+Network speed affects transcription time since audio must upload to API services. Slow internet connections create bottlenecks, particularly for large files. Consider chunking settings if you consistently work with long recordings.
+
+The choice of transcription model impacts speed. Whisper Large is more accurate but slower than Whisper Base. If speed matters more than perfect accuracy, consider using a smaller model through your API settings.
+
+### Recordings Stuck After Restart
+
+If Speakr crashed or restarted while recordings were processing, they automatically resume on next startup. The job queue persists to the database, so no uploads are lost. Check the logs for "Recovered orphaned jobs" messages confirming jobs were resumed.
+
+### Deleted Recordings Still in Processing Queue (Fixed in v0.6.2)
+
+!!! success "Fixed in v0.6.2"
+    Prior to v0.6.2, deleted recordings could remain visible in the processing queue as "ghost entries." Clicking on these would open an empty recording window. This has been resolved - deleted recordings are now immediately removed from both the frontend queue and backend job tracking.
+
+If you're on v0.6.1 or earlier and see this behavior, upgrade to v0.6.2. The fix ensures that when you delete a recording:
+
+- It's removed from your library
+- It's removed from the processing queue display
+- Any associated backend jobs are cleaned up
+- No ghost entries remain clickable
+
+### Files Over 25MB Fail with OpenAI
+
+OpenAI's Whisper API has a 25MB file size limit. For larger files, enable [chunking](features.md#audio-chunking) in your environment configuration. Learn about [chunking strategies](faq.md#whats-the-difference-between-chunking-by-size-vs-duration):
+```
+ENABLE_CHUNKING=true
+CHUNK_LIMIT=20MB  # or use duration: CHUNK_LIMIT=1400s
+CHUNK_OVERLAP_SECONDS=3
+```
+
+You can specify chunk limits either by file size (MB) or duration (seconds). For models with specific duration limits like Azure's 1500-second maximum, use duration-based chunking. The system will automatically split your recordings and reassemble the transcription.
+
+### ASR Timeout on Long Recordings
+
+Long recordings (over 30 minutes) may timeout during ASR processing. Increase the timeout in Admin Settings > System Settings > "ASR Timeout Seconds". For a 2-hour recording, set it to at least 7200 seconds (2 hours). Very long recordings like 3+ hour files may need longer timeouts depending on the GPU you are using for transcription (if local).
+
+### Web Interface Feels Sluggish
+
+Browser performance degrades with very large transcriptions. Recordings over 2 hours can generate massive amounts of text that some browsers may struggle to display smoothly. The bubble view for speaker-labeled transcriptions is particularly resource-intensive.
+
+Clear your browser cache if the interface gradually becomes slower over time. Speakr caches data locally for performance, but this cache can become corrupted. In Chrome or Firefox, hard refresh with Ctrl+Shift+R to reload fresh assets.
+
+### Blank Screens or Missing Text After Upgrading
+
+If the interface shows blank panels or raw translation keys (console messages like `Translation not found for key: ...`) right after upgrading the Docker image, your browser is serving cached assets from the previous version against the new pages. Clear the site data for your Speakr domain (in Chrome: DevTools → Application → Storage → Clear site data), or unregister the service worker and hard refresh.
+
+From v0.10.3-alpha onward this heals itself: each release installs a service worker with its own cache namespace, static assets are revalidated on load, and translation files are always fetched fresh, so an image upgrade can no longer strand a stale app shell. Upgrades from versions before v0.10.3-alpha may still need the one-time manual clear described above.
+
+### App Unresponsive While Media Plays or Chats Stream
+
+Since v0.10.4-alpha the stock image runs threaded gunicorn workers (3 processes x 8 threads), so streaming responses such as chat answers and audio or video playback no longer occupy one of only three request slots. If you override the container command, adopt `--worker-class gthread --threads 8` to get the same behavior. Behind nginx, `proxy_buffering on` helps further: nginx absorbs each response at local speed and feeds slow clients itself, freeing the application thread in seconds rather than for the duration of playback.
+
+## Feature-Specific Issues
+
+### Chat Responses End Mid-Sentence
+
+If a chat or Inquire response stops abruptly with a note that the output token limit was reached, the model hit the configured `CHAT_MAX_TOKENS` ceiling (default 2000). This is common with reasoning models, whose hidden reasoning tokens share the same budget as the visible answer. Ask the model to continue from where it stopped, or raise `CHAT_MAX_TOKENS` in your `.env`. Before v0.10.3-alpha these truncated responses were displayed as if they had completed normally; they are now flagged explicitly.
+
+### Speaker Identification Not Working
+
+[Speaker diarization](features.md#speaker-diarization) requires the [ASR endpoint](getting-started.md#option-b-custom-asr-endpoint-configuration), not standard Whisper API. Configure speaker settings in [system settings](admin-guide/system-settings.md). Verify you've configured ASR settings correctly in your environment file. The ASR_BASE_URL should point to a valid ASR service that supports diarization.
+
+Even with ASR enabled, you must explicitly request diarization when uploading or reprocessing recordings. Speakr should do this by default, but user settings may override this behavior. Check the speaker count settings - if you set min and max speakers to 1, diarization effectively disables. Use reasonable ranges like 2-6 speakers for most recordings.
+
+After transcription, speakers appear as generic labels (SPEAKER_01, etc.). You must manually [identify speakers](user-guide/transcripts.md#speaker-identification) by clicking the labels and assigning names. Manage your [speaker library](user-guide/settings.md#speakers-management-tab) in account settings.
+
+### PyTorch 2.6 Weights Loading Error (WhisperX ASR Service)
+
+If you're getting an error like this when trying to transcribe:
+
+```
+Weights only load failed. This file can still be loaded...
+WeightsUnpickler error: Unsupported global: GLOBAL omegaconf.listconfig.ListConfig was not an allowed global by default.
+```
+
+This is caused by a breaking change in PyTorch 2.6 where the default value of `weights_only` in `torch.load` changed from `False` to `True`. The pyannote models used for voice activity detection in WhisperX are affected.
+
+**Solution**: Add this environment variable to your WhisperX ASR service container in your docker-compose.yml:
+
+```yaml
+whisper-asr:
+  image: learnedmachine/whisperx-asr-service:latest
+  environment:
+    - TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=true
+    - HF_HOME=/.cache  # keep model downloads in the cache volume
+    # ... your other environment variables
+```
+
+!!! warning "Important"
+    This environment variable must be set directly in the docker-compose.yml file under the `environment` section of the ASR service container. Setting it in a `.env` file may not work reliably.
+
+After adding this variable, restart your ASR container:
+```bash
+docker compose down whisper-asr
+docker compose up -d whisper-asr
+```
+
+For more details, see the [WhisperX issue discussion](https://github.com/m-bain/whisperX/issues/1304).
+
+### Diarization Fails After Enabling Offline Mode (WhisperX ASR Service)
+
+If speaker diarization worked while online but fails with an error like this after setting `HF_HUB_OFFLINE=1`:
+
+```
+Speaker diarization failed: An error happened while trying to locate the file
+on the Hub and we cannot find the requested files in the local cache.
+```
+
+the pyannote diarization model was never stored in the cache volume. Unless `HF_HOME` is set, Hugging Face downloads go to `/root/.cache/huggingface` inside the container filesystem, so the model silently disappears whenever the container is recreated. Recreating the container is exactly what enabling offline mode requires, which is when the missing model surfaces.
+
+**Solution**: Add `HF_HOME=/.cache` to the ASR container's environment so it points at the mounted cache volume, remove `HF_HUB_OFFLINE=1` for now, and recreate the container. Run one transcription with diarization while online so the model downloads into the volume, then re-enable `HF_HUB_OFFLINE=1`. You can confirm the model is in the volume by checking for `/.cache/hub/models--pyannote--speaker-diarization-community-1` inside the container.
+
+Images newer than v0.4.0 of the WhisperX ASR service set `HF_HOME=/.cache` by default, so this only affects v0.4.0 and earlier deployments configured without it.
+
+### WhisperX Shows UNKNOWN_SPEAKER
+
+If WhisperX only shows "UNKNOWN_SPEAKER" instead of numbered speakers (SPEAKER_00, SPEAKER_01, etc.), check these common issues:
+
+1. **Wrong ASR_ENGINE**: You must use `ASR_ENGINE=whisperx` in your ASR container's Docker environment. The `faster_whisper` engine does NOT support speaker diarization, even though it can transcribe audio.
+
+2. **Missing or invalid HF_TOKEN**: The ASR container needs a valid HuggingFace token to download the diarization models. Ensure your `HF_TOKEN` environment variable is set in the ASR container configuration.
+
+3. **ASR_DIARIZE not enabled**: While this should be automatic when `USE_ASR_ENDPOINT=true`, explicitly set `ASR_DIARIZE=true` in your Speakr .env file if speakers aren't being detected.
+
+4. **Docker networking issues**: If using the Speakr and ASR webservice containers in the same docker-compose, containers must communicate via service names (e.g., `http://whisper-asr:9000`), not localhost or external IPs.
+
+Check your ASR container logs for pyannote/VAD messages to confirm diarization models are loading correctly.
+
+### ASR Service on Mac Shows GPU Errors
+
+If you're running the ASR webservice on macOS and getting GPU-related errors or "no matching manifest" errors:
+
+- **Use the CPU image**: Replace `onerahmet/openai-whisper-asr-webservice:latest-gpu` with `onerahmet/openai-whisper-asr-webservice:latest`
+- **Remove GPU configuration**: Delete the entire `deploy` section with GPU device reservations from your docker-compose.yml
+- **Expect slower processing**: CPU-based transcription works but is significantly slower than GPU acceleration
+
+This is a Docker limitation on macOS - GPU passthrough isn't supported because Docker runs in a Linux VM. See the [FAQ](faq.md#can-i-use-the-asr-webservice-for-speaker-diarization-on-mac) for complete Mac configuration.
+
+### Sharing Links Don't Work
+
+[Sharing](user-guide/sharing.md) requires your Speakr instance to be accessible from the internet with HTTPS. See [sharing requirements](user-guide/sharing.md#requirements-for-sharing) and [security considerations](user-guide/sharing.md#security-and-privacy-considerations). Local installations or non-SSL setups cannot generate working share links. The share button will be disabled or show an error explaining the requirements.
+
+If your instance meets the requirements but shares still fail, check that your configured URL in the environment matches reality. Mismatched URLs cause share links to point to the wrong location. The URL must be exactly what external users will use to access your instance.
+
+### Inquire Mode Returns No Results
+
+[Semantic search](user-guide/inquire-mode.md) requires the embedding model to be properly installed and initialized. Check the [Vector Store tab](admin-guide/vector-store.md) in admin settings and review [vector store troubleshooting](admin-guide/vector-store.md#troubleshooting-common-issues) - it should show "Available" status. If not, the sentence-transformers library might be missing or failed to load.
+
+All recordings need processing before they're searchable. The Vector Store tab shows how many recordings are processed versus pending. Use the process button to manually trigger embedding generation if automatic processing has stalled.
+
+Query formulation matters enormously. [Inquire Mode](user-guide/inquire-mode.md) understands context and meaning, not just keywords. Learn [effective search strategies](user-guide/inquire-mode.md#asking-effective-questions) in the user guide. Ask complete questions rather than typing isolated words. "What did we decide about the budget?" works better than just "budget decision".
+
+## Additional Considerations
+
+### Recording Disclaimer for Legal Compliance
+
+In many jurisdictions, you must inform participants they're being recorded. Enable a recording disclaimer in [System Settings](admin-guide/system-settings.md#recording-disclaimer). Check the [FAQ on recording compliance](faq.md#do-i-need-to-inform-people-theyre-being-recorded). Set custom text that appears before any recording starts, such as legal notices about consent requirements. This feature is particularly important in regions with strict recording laws like Australia or California.
+
+A separate [upload disclaimer](admin-guide/system-settings.md#upload-disclaimer) can be configured to show a notice before file uploads. You can also display a persistent [custom banner](admin-guide/system-settings.md#custom-banner) at the top of the page for announcements or policy reminders.
+
+### Offline Deployment
+
+Speakr can run completely offline as all dependencies are built into the Docker image. For offline deployments, use local models via Ollama for [text generation](features.md#automatic-summarization) and ensure your ASR endpoint is hosted locally. The system will work without internet access once properly configured.
+
+**Inquire Mode (Semantic Search)**: If you use Inquire Mode with the default local embedding model (all-MiniLM-L6-v2, or any value configured via `EMBEDDING_MODEL`), the model is automatically cached in the persistent `instance/huggingface/` directory on first use. Run Speakr once with internet access to download the model, then it will load from cache on subsequent restarts and no further network access is required. Configurations that use `EMBEDDING_BASE_URL` to offload embeddings to an API provider naturally require network access to that provider on every request.
+
+### Non-Docker Installation
+
+While Docker is the only officially supported installation method, you can attempt manual installation using npm and Python. You'll need to handle dependencies, environment setup, and configuration yourself. This approach is not recommended for regular use and you'll need to troubleshoot issues independently.
+
+## Getting Help
+
+### Check the Logs
+
+Docker logs contain valuable debugging information. Use `docker compose logs -f app` to see real-time logs. Look for ERROR or WARNING messages that correspond to when problems occurred. Python tracebacks indicate code-level issues that might require support.
+
+For ASR issues, also check the ASR container logs: `docker compose logs -f whisper-asr-webservice`
+
+### System Information
+
+When requesting help, provide your system configuration from the About tab in account settings. Include the Speakr version, configured AI model, transcription service type, and any error messages. This context helps others understand your specific setup.
+
+### Community Support
+
+The GitHub repository's issue tracker is your best resource for reporting bugs or requesting features. Search existing issues first - someone might have already encountered and solved your problem. When creating new issues, include specific steps to reproduce the problem.
+
+---
+
+Next: [FAQ](faq.md) →

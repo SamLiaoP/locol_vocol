@@ -1,0 +1,52 @@
+<!-- Empty / landing surface.
+
+     Shows whenever no recording is selected AND we are not in the
+     recording flow. Two flavours:
+       - First-time / truly empty: a friendly "Get started" panel with
+         an explicit Upload and Record CTA.
+       - Recordings list has items but none selected (e.g. just after a
+         deletion auto-selected nothing): a minimal "Select a recording
+         or upload a new one" prompt.
+
+     Sits as the landing surface of the main column. The detail view
+     (its sibling) has its own v-if for the populated state. -->
+<!-- min-h-[60vh] ensures the empty-state has visible height on mobile
+     even when its parent (<main>) has overflow-y: auto and no
+     explicit child-stretching context — without this the flex-1
+     collapsed to 0 height on phones (visible as a blank screen
+     under the global header when no recording is selected). -->
+{# Render whenever neither sibling surface does: not just "nothing
+   selected", but also any state mismatch (a selected recording with no
+   active view) — the prompt is always better than a blank main area. #}
+<div v-if="currentView !== 'recording' && !(currentView === 'detail' && selectedRecording)"
+     class="flex-1 flex items-center justify-center p-6 min-h-[60vh]">
+    <div class="max-w-md w-full text-center">
+        <!-- TRULY EMPTY (no recordings at all) -->
+        <template v-if="!recordings || recordings.length === 0">
+            <div class="mx-auto mb-6 w-20 h-20 rounded-full flex items-center justify-center"
+                 style="background: var(--bg-tertiary);">
+                <i class="fas fa-microphone text-3xl" style="color: var(--text-accent);"></i>
+            </div>
+            <h2 class="text-2xl font-semibold mb-2" style="color: var(--text-primary);" v-text="t('emptyState.readyToCapture')"></h2>
+            <p class="t-body mb-6" style="color: var(--text-muted);" v-text="t('emptyState.readyBody')"></p>
+            <div class="flex flex-col sm:flex-row gap-2 justify-center">
+                <button @click="switchToUploadView" class="btn btn--primary">
+                    <i class="fas fa-plus"></i><span v-text="t('emptyState.newRecording')"></span>
+                </button>
+            </div>
+        </template>
+
+        <!-- SOMETHING SELECTABLE EXISTS but nothing currently selected -->
+        <template v-else>
+            <div class="mx-auto mb-4 w-14 h-14 rounded-full flex items-center justify-center"
+                 style="background: var(--bg-tertiary);">
+                <i class="fas fa-list text-xl" style="color: var(--text-muted);"></i>
+            </div>
+            <h2 class="text-lg font-semibold mb-1" style="color: var(--text-primary);" v-text="t('emptyState.selectRecording')"></h2>
+            <p class="t-meta mb-5" v-text="t('emptyState.selectBody')"></p>
+            <button @click="switchToUploadView" class="btn btn--ghost">
+                <i class="fas fa-plus"></i><span v-text="t('emptyState.newRecording')"></span>
+            </button>
+        </template>
+    </div>
+</div>

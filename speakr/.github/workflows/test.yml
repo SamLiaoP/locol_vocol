@@ -1,0 +1,190 @@
+name: Tests
+
+# Runs the full automated suite on every push and pull request. The existing
+# docker-publish.yml only ran two migration tests on release, so nothing
+# guarded day-to-day changes; this workflow gives the ~378 Python tests + the
+# Vitest JS tests real per-commit regression protection.
+#
+# Syntax is standard GitHub Actions and also runs on Forgejo Actions
+# (Forgejo reads .github/workflows by default). The Python suite isolates
+# itself to a throwaway SQLite DB via conftest.py, so it needs no app config.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: speakr
+          POSTGRES_PASSWORD: speakr
+          POSTGRES_DB: speakr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U speakr"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install ffmpeg (needed by stitch / ffprobe tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+
+      - name: Build the Tailwind stylesheet as the image build does
+        run: scripts/build_css.sh
+
+      - name: Run test suite
+        env:
+          # The app tests run against an isolated SQLite DB (see conftest.py).
+          # test_postgres_migrations.py reads TEST_DATABASE_URI separately so it
+          # exercises real PostgreSQL compatibility against the service above.
+          TEST_DATABASE_URI: postgresql://speakr:speakr@localhost:5432/speakr_test
+        run: pytest tests/ -q --cov=src --cov-report=term-missing --cov-fail-under=60
+
+  # Speakr and whisperx-asr-service set up exactly as their docs describe
+  # (config/env.whisperx.example; the service's docker-compose.yml plus its
+  # SETUP_GUIDE .env block), talking over HTTP. The service runs its real code
+  # on stand-in ML packages, so this needs no GPU, secrets or model downloads.
+  # It would have caught #409. Also checks that the model rules vendored in
+  # tests/contract still match the service's own code.
+  e2e-whisperx-defaults:
+    runs-on: ubuntu-latest
+    env:
+      WHISPERX_REF: ${{ vars.WHISPERX_REF || 'main' }}
+
+    steps:
+      - name: Checkout Speakr
+        uses: actions/checkout@v5
+
+      - name: Checkout whisperx-asr-service
+        uses: actions/checkout@v5
+        with:
+          repository: murtaza-nasir/whisperx-asr-service
+          ref: ${{ env.WHISPERX_REF }}
+          path: whisperx
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt pytest
+          python -m venv /tmp/wxv
+          /tmp/wxv/bin/pip install -r whisperx/tests/requirements-ci.txt
+
+      - name: Start whisperx-asr-service (documented settings, stand-in models)
+        run: |
+          /tmp/wxv/bin/python whisperx/tests/e2e/stub_server.py --port 9000 \
+            --env-file whisperx/tests/defaults/minimal.env > /tmp/whisperx.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs http://127.0.0.1:9000/health && break; sleep 1; done
+          curl -fs http://127.0.0.1:9000/health
+
+      - name: Contract - vendored model rules match the service
+        env:
+          WHISPERX_REPO: whisperx
+          WHISPERX_PYTHON: /tmp/wxv/bin/python
+        run: pytest tests/contract -q -p no:cacheprovider
+
+      - name: End to end with the documented settings
+        env:
+          SPEAKR_E2E: '1'
+          WHISPERX_URL: http://127.0.0.1:9000
+          WHISPERX_LOG: /tmp/whisperx.log
+        run: pytest tests/e2e -q -p no:cacheprovider -rxs
+
+      - name: Service log
+        if: always()
+        run: tail -n 200 /tmp/whisperx.log || true
+
+  browser-smoke:
+    # Opens every page in headless Chromium and fails on failed requests,
+    # JavaScript errors, leftover template text, or a header whose user menu
+    # does not open (tests/e2e/test_browser_smoke.py). Vendor files are
+    # downloaded exactly as the Dockerfile does it, in production mode, so a
+    # reference to a file the image lacks fails here. The Tailwind stylesheet
+    # is compiled with the same pinned CLI as the Dockerfile css-stage.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest playwright
+
+      - name: Download vendor files as the image build does
+        run: PRODUCTION=1 python scripts/download_offline_deps.py
+
+      - name: Build the Tailwind stylesheet as the image build does
+        run: scripts/build_css.sh
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Start Speakr (config/env.whisperx.example)
+        run: |
+          python tests/e2e/run_speakr.py --port 8899 --workdir /tmp/speakr-smoke > /tmp/speakr.log 2>&1 &
+          for i in $(seq 1 90); do curl -fs -o /dev/null http://127.0.0.1:8899/login && break; sleep 2; done
+          curl -fs -o /dev/null http://127.0.0.1:8899/login
+
+      - name: Browser smoke test
+        env:
+          SPEAKR_BROWSER_SMOKE: '1'
+          SPEAKR_BASE_URL: http://127.0.0.1:8899
+        run: pytest tests/e2e/test_browser_smoke.py -q -p no:cacheprovider --noconftest -rs
+
+      - name: Speakr log
+        if: always()
+        run: tail -n 200 /tmp/speakr.log || true
+
+  js-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # No npm cache: package-lock.json is gitignored in this repo, so it's
+          # never in the CI checkout. cache: npm (and npm ci) both require a
+          # committed lock file, so we use `npm install` below instead.
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Vitest
+        run: npm test

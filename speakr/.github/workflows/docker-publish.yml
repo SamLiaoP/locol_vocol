@@ -1,0 +1,260 @@
+name: Docker Build and Publish
+
+# Publishing is owned by this GitHub workflow. It builds and pushes the
+# multi-arch images to Docker Hub when a GitHub Release is published, on public
+# runners with auditable build logs and provenance attestation. Building images
+# on public CI rather than a private runner lets anyone verify exactly how a
+# published image was produced and from which commit. The Forgejo
+# docker-publish workflow is kept as a manual fallback only (workflow_dispatch),
+# so the same tag is never published twice. To hand CD back to Forgejo, restore
+# its `push: tags` trigger and comment out the `release` trigger below.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: docker.io
+  # Use explicit image name instead of github.repository
+  IMAGE_NAME: learnedmachine/speakr
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: speakr
+          POSTGRES_PASSWORD: speakr
+          POSTGRES_DB: speakr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U speakr"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install ffmpeg (needed by stitch / ffprobe tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+
+      - name: Run full test suite (gates the release)
+        env:
+          # App tests run on an isolated SQLite DB (conftest.py);
+          # test_postgres_migrations reads TEST_DATABASE_URI for real PG.
+          TEST_DATABASE_URI: postgresql://speakr:speakr@localhost:5432/speakr_test
+        run: pytest tests/ -q --cov=src --cov-report=term-missing --cov-fail-under=60
+
+  smoke-lite:
+    # Build the lite image for amd64 into the local daemon and open every page
+    # of it in a browser (tests/e2e/test_browser_smoke.py) before anything is
+    # pushed. The build jobs below wait for this job, so a broken image is
+    # never published. It shares the GitHub Actions build cache with them.
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo docker image prune -af
+          df -h /
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build lite image (amd64, local)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: speakr:smoke
+          cache-from: type=gha,scope=lite-amd64
+          cache-to: type=gha,scope=lite-amd64,mode=max
+          build-args: |
+            PRODUCTION=1
+            LIGHTWEIGHT=1
+
+      - name: Start the image with the example settings
+        run: |
+          python3 tests/e2e/smoke_env.py > smoke.env
+          docker run -d --name speakr-smoke -p 8899:8899 --env-file smoke.env speakr:smoke
+          for i in $(seq 1 90); do curl -fs -o /dev/null http://127.0.0.1:8899/login && break; sleep 2; done
+          curl -fs -o /dev/null http://127.0.0.1:8899/login
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright
+        run: |
+          pip install pytest playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Browser smoke test against the image
+        env:
+          SPEAKR_BROWSER_SMOKE: '1'
+          SPEAKR_BASE_URL: http://127.0.0.1:8899
+        run: pytest tests/e2e/test_browser_smoke.py -q -p no:cacheprovider --noconftest -rs
+
+      - name: Container log
+        if: always()
+        run: docker logs speakr-smoke 2>&1 | tail -n 200 || true
+
+  build:
+    needs: [test, smoke-lite]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
+    steps:
+      # Free up disk space on the runner (~30GB)
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo docker image prune -af
+          df -h /
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Set up QEMU for multi-platform builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login to Docker Hub
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Extract metadata (tags, labels) for Docker
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=match,pattern=v(.*),group=1
+            type=sha
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' || github.event_name == 'release' }}
+
+      # Build and push full Docker image
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # No Actions cache for the full image. Its PyTorch layers for two
+          # architectures alone fill the 10 GB cache, and a layer evicted
+          # mid-build failed the v0.10.10 release build ("cache entry no longer
+          # exists"). It is built only for releases.
+          build-args: |
+            PRODUCTION=1
+
+  build-lite:
+    needs: [test, smoke-lite]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      # Free up disk space on the runner (~30GB)
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+          sudo docker image prune -af
+          df -h /
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Set up QEMU for multi-platform builds
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login to Docker Hub
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Extract metadata for lite image
+      - name: Extract Docker metadata (lite)
+        id: meta-lite
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Never tag the lite image as `latest`; `latest` is the full image,
+          # set only by the build job above. Without this, metadata-action's
+          # default `latest=auto` makes the lite job also push `latest`, and
+          # since it runs last it clobbers the full image's `latest`.
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=lite,enable=${{ github.event_name == 'workflow_dispatch' || github.event_name == 'release' }}
+            type=match,pattern=v(.*),group=1,suffix=-lite
+            type=sha,suffix=-lite
+
+      # Build and push lightweight Docker image (no PyTorch/sentence-transformers)
+      - name: Build and push lite Docker image
+        id: build-and-push-lite
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-lite.outputs.tags }}
+          labels: ${{ steps.meta-lite.outputs.labels }}
+          cache-from: |
+            type=gha,scope=lite
+            type=gha,scope=lite-amd64
+          cache-to: type=gha,scope=lite,mode=max
+          build-args: |
+            PRODUCTION=1
+            LIGHTWEIGHT=1

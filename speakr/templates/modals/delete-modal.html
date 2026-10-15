@@ -1,0 +1,20 @@
+<!-- Delete Confirmation Modal (design system v1) -->
+<div v-if="showDeleteModal" @click.self="cancelDelete" class="modal-overlay">
+    <div class="modal-panel modal-panel--sm modal-panel--danger">
+        <div class="modal-header">
+            <i class="fas fa-exclamation-triangle text-2xl text-[var(--text-danger)]"></i>
+            <div class="flex-1">
+                <h3 class="modal-title" v-text="t('modal.deleteRecording')"></h3>
+                <div class="modal-subtitle" v-text="t('help.thisActionCannotBeUndone')"></div>
+            </div>
+            <button @click="cancelDelete" class="modal-close" :title="t('buttons.close')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            Are you sure you want to delete "${recordingToDelete?.title || 'this recording'}"?
+        </div>
+        <div class="modal-footer">
+            <button @click="cancelDelete" class="btn btn--ghost">${ t('buttons.cancel') }</button>
+            <button @click="deleteRecording" class="btn btn--danger">${ t('buttons.delete') || 'Delete' }</button>
+        </div>
+    </div>
+</div>

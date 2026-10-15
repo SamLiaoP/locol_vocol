@@ -1,0 +1,19 @@
+services:
+  app:
+    # locol_vocol 客製版 Speakr：從 ./speakr 原始碼 build（LIGHTWEIGHT=1 不含 PyTorch）
+    build:
+      context: ./speakr
+      args:
+        LIGHTWEIGHT: "1"
+    image: locol-vocol-speakr:latest
+    container_name: speakr
+    restart: unless-stopped
+    ports:
+      - "8899:8899"
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./uploads:/data/uploads
+      - ./instance:/data/instance
