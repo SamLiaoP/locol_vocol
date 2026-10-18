@@ -30,287 +30,115 @@ body.unloaded {
 
 /* Color Scheme CSS Variables */
 :root {
-    /* Default Light Theme (Blue) - More muted with better contrast */
-    --bg-primary: #e8eaed; /* muted gray */
-    --bg-secondary: #f8f9fa; /* off-white */
-    --bg-tertiary: #f0f2f4; /* light gray */
-    --bg-accent: #c3d9f7; /* muted blue */
-    --bg-accent-hover: #aec9f2; /* deeper muted blue */
-    --bg-button: #2563eb; /* blue-600 */
-    --bg-button-hover: #1d4ed8; /* blue-700 */
-    --bg-danger: #dc2626; /* red-600 */
-    --bg-danger-hover: #b91c1c; /* red-700 */
-    --bg-danger-light: #fce4e4; /* muted red */
-    --bg-info-light: #c3d9f7; /* muted blue */
-    --bg-warn-light: #d4e8f5; /* soft blue */
-    --bg-success-light: #c6f0dc; /* muted green */
-    --bg-pending-light: #eeeeec; /* stone */
-    --bg-input: #fafbfc; /* slightly gray white */
-    --bg-audio-player: var(--bg-tertiary);
+    /* locol_vocol palette — light. Warm paper neutrals, one apricot accent
+       (the logo's colour). Every name below is used by the templates; the
+       --accent* tokens are the single source the rest derive from. */
+    --accent: #d4762a;
+    --accent-hover: #bf651f;
+    --accent-soft: #f9e7d6;
+    --accent-soft-hover: #f4d9bf;
+    --on-accent: #ffffff;
+    --accent-primary: var(--accent);
+    --text-accent-contrast: var(--on-accent);
 
-    --text-primary: #1f2937; /* gray-800 */
-    --text-secondary: #374151; /* gray-700 */
-    --text-muted: #6b7280; /* gray-500 */
-    --text-light: #9ca3af; /* gray-400 */
-    --text-accent: #1d4ed8; /* blue-700 */
-    --text-button: #ffffff; /* white */
-    --text-danger: #b91c1c; /* red-700 */
-    --text-danger-strong: #991b1b; /* red-800 */
-    --text-info-strong: #1e40af; /* blue-800 */
-    --text-warn-strong: #0369a1; /* sky-700 - friendly blue tone */
-    --text-success-strong: #065f46; /* green-800 */
-    --text-pending-strong: #44403c; /* stone-700 */
+    --bg-primary: #f5f3ef;
+    --bg-secondary: #fffdfa;
+    --bg-tertiary: #efece6;
+    --bg-accent: var(--accent-soft);
+    --bg-accent-hover: var(--accent-soft-hover);
+    --bg-button: var(--accent);
+    --bg-button-hover: var(--accent-hover);
+    --bg-danger: #d14b3f;
+    --bg-danger-hover: #b8402f;
+    --bg-danger-light: #fbe5e2;
+    --bg-info-light: #f9e7d6;
+    --bg-warn-light: #fbf0d6;
+    --bg-success-light: #dff3e7;
+    --bg-pending-light: #efece6;
+    --bg-input: #ffffff;
+    --bg-audio-player: var(--bg-secondary);
 
-    --border-primary: #e5e7eb; /* gray-200 */
-    --border-secondary: #d1d5db; /* gray-300 */
-    --border-accent: #93c5fd; /* blue-300 */
-    --border-danger: #f87171; /* red-400 */
-    --border-focus: #3b82f6; /* blue-500 */
-    --ring-focus: #bfdbfe; /* blue-200 */
-    
-    --scrollbar-track: #f1f1f1;
-    --scrollbar-thumb: #c5c5c5;
-    --scrollbar-thumb-hover: #a8a8a8;
-    
+    --text-primary: #1f1d1a;
+    --text-secondary: #4b4741;
+    --text-muted: #7c766d;
+    --text-light: #a7a199;
+    --text-accent: #b35f1a;
+    --text-button: var(--on-accent);
+    --text-danger: #b9382e;
+    --text-danger-strong: #9a2b22;
+    --text-info-strong: #8a4a12;
+    --text-warn-strong: #8a5a0a;
+    --text-success-strong: #1f6b45;
+    --text-pending-strong: #4b4741;
+
+    --border-primary: #e6e1d8;
+    --border-secondary: #d5cfc4;
+    --border-accent: #e9bf98;
+    --border-danger: #e39a92;
+    --border-focus: var(--accent);
+    --ring-focus: #f2d3b6;
+
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: #d5cfc4;
+    --scrollbar-thumb-hover: #bfb8ac;
+
     /* Toast notification colors */
-    --bg-success: #10b981;
-    --border-success: #059669;
-}
-
-/* Light Theme Variants */
-.theme-light-emerald {
-    --bg-primary: #e6f0e9; /* muted green-gray */
-    --bg-secondary: #f4f9f5; /* soft off-white green */
-    --bg-tertiary: #ebf4ed; /* light muted green */
-    --bg-accent: #d0e8d7; /* muted pastel green */
-    --bg-accent-hover: #c1e0ca; /* deeper muted green */
-    --bg-button: #059669; /* keep button visible */
-    --bg-button-hover: #047857; /* keep button visible */
-    --bg-input: #f9fcfa; /* slightly green white */
-    --text-accent: #047857; /* keep accent text visible */
-    --border-primary: #d4e5d8; /* muted green border */
-    --border-secondary: #c2dcc9; /* soft green border */
-    --border-accent: #a8d0b3; /* medium green border */
-    --border-focus: #10b981; /* keep focus visible */
-    --ring-focus: #d0e8d7; /* muted green ring */
-    --bg-audio-player: var(--bg-tertiary);
-}
-
-.theme-light-purple {
-    --bg-primary: #ebe9f0; /* muted purple-gray */
-    --bg-secondary: #f7f6f9; /* soft off-white purple */
-    --bg-tertiary: #f0eef4; /* light muted purple */
-    --bg-accent: #dcd7e8; /* muted pastel purple */
-    --bg-accent-hover: #d0c9df; /* deeper muted purple */
-    --bg-button: #7c3aed; /* keep button visible */
-    --bg-button-hover: #6d28d9; /* keep button visible */
-    --bg-input: #faf9fc; /* slightly purple white */
-    --text-accent: #6d28d9; /* keep accent text visible */
-    --border-primary: #dbd6e6; /* muted purple border */
-    --border-secondary: #cfc8dd; /* soft purple border */
-    --border-accent: #bab0d2; /* medium purple border */
-    --border-focus: #8b5cf6; /* keep focus visible */
-    --ring-focus: #dcd7e8; /* muted purple ring */
-    --bg-audio-player: var(--bg-tertiary);
-}
-
-.theme-light-rose {
-    --bg-primary: #f0e9ed; /* muted rose-gray */
-    --bg-secondary: #f9f6f7; /* soft off-white rose */
-    --bg-tertiary: #f4eef1; /* light muted rose */
-    --bg-accent: #e6d7df; /* muted pastel rose */
-    --bg-accent-hover: #dfc9d4; /* deeper muted rose */
-    --bg-button: #e11d48; /* keep button visible */
-    --bg-button-hover: #be185d; /* keep button visible */
-    --bg-input: #fcf9fa; /* slightly rose white */
-    --text-accent: #be185d; /* keep accent text visible */
-    --border-primary: #e5d6de; /* muted rose border */
-    --border-secondary: #dbc8d2; /* soft rose border */
-    --border-accent: #d0b0bf; /* medium rose border */
-    --border-focus: #ec4899; /* keep focus visible */
-    --ring-focus: #e6d7df; /* muted rose ring */
-    --bg-audio-player: var(--bg-tertiary);
-}
-
-.theme-light-amber {
-    --bg-primary: #efebe6; /* muted amber-gray */
-    --bg-secondary: #f9f7f4; /* soft off-white amber */
-    --bg-tertiary: #f3efe9; /* light muted amber */
-    --bg-accent: #e5ddd1; /* muted pastel amber */
-    --bg-accent-hover: #ddd2c2; /* deeper muted amber */
-    --bg-button: #d97706; /* keep button visible */
-    --bg-button-hover: #b45309; /* keep button visible */
-    --bg-input: #fbfaf8; /* slightly amber white */
-    --text-accent: #b45309; /* keep accent text visible */
-    --border-primary: #e2dace; /* muted amber border */
-    --border-secondary: #d9cdb9; /* soft amber border */
-    --border-accent: #cdbca1; /* medium amber border */
-    --border-focus: #f59e0b; /* keep focus visible */
-    --ring-focus: #e5ddd1; /* muted amber ring */
-    --bg-audio-player: var(--bg-tertiary);
-}
-
-.theme-light-teal {
-    --bg-primary: #e7f0ef; /* muted teal-gray */
-    --bg-secondary: #f5f9f8; /* soft off-white teal */
-    --bg-tertiary: #ecf4f3; /* light muted teal */
-    --bg-accent: #d2e5e2; /* muted pastel teal */
-    --bg-accent-hover: #c3ddd9; /* deeper muted teal */
-    --bg-button: #0d9488; /* keep button visible */
-    --bg-button-hover: #0f766e; /* keep button visible */
-    --bg-input: #f9fcfb; /* slightly teal white */
-    --text-accent: #0f766e; /* keep accent text visible */
-    --border-primary: #c8dfdc; /* muted teal border */
-    --border-secondary: #b5d3ce; /* soft teal border */
-    --border-accent: #9cc5be; /* medium teal border */
-    --border-focus: #14b8a6; /* keep focus visible */
-    --ring-focus: #d2e5e2; /* muted teal ring */
-    --bg-audio-player: var(--bg-tertiary);
+    --bg-success: #2f9e6a;
+    --border-success: #27845a;
 }
 
 /* Dark Theme Base */
 .dark {
-    --bg-primary: #111827; /* gray-900 */
-    --bg-secondary: #1f2937; /* gray-800 */
-    --bg-tertiary: #374151; /* gray-700 */
-    --bg-accent: #1e3a8a; /* blue-900 */
-    --bg-accent-hover: #1e40af; /* blue-800 */
-    --bg-button: #2563eb; /* blue-600 */
-    --bg-button-hover: #3b82f6; /* blue-500 */
-    --bg-danger: #dc2626; /* red-600 */
-    --bg-danger-hover: #ef4444; /* red-500 */
-    --bg-danger-light: #7f1d1d; /* red-900 */
-    --bg-info-light: #1e3a8a; /* blue-900 */
-    --bg-warn-light: #164e63; /* cyan-800 - soft, friendly dark blue */
-    --bg-success-light: #064e3b; /* green-900 */
-    --bg-pending-light: #292524; /* stone-800 */
-    --bg-input: #374151; /* gray-700 */
+    /* locol_vocol palette — dark. Near-black warm greys, the same apricot
+       accent lifted for contrast; buttons carry dark text on apricot. */
+    --accent: #e9a063;
+    --accent-hover: #f0b27f;
+    --accent-soft: #3a2a1b;
+    --accent-soft-hover: #4a3522;
+    --on-accent: #1b1208;
+    --accent-primary: var(--accent);
+    --text-accent-contrast: var(--on-accent);
+
+    --bg-primary: #121315;
+    --bg-secondary: #1a1b1e;
+    --bg-tertiary: #232528;
+    --bg-accent: var(--accent-soft);
+    --bg-accent-hover: var(--accent-soft-hover);
+    --bg-button: var(--accent);
+    --bg-button-hover: var(--accent-hover);
+    --bg-danger: #d9534a;
+    --bg-danger-hover: #e3675f;
+    --bg-danger-light: #3b1f1c;
+    --bg-info-light: #3a2a1b;
+    --bg-warn-light: #3a2f14;
+    --bg-success-light: #16302a;
+    --bg-pending-light: #26282b;
+    --bg-input: #1f2124;
     --bg-audio-player: var(--bg-secondary);
 
-    --text-primary: #f3f4f6; /* gray-100 */
-    --text-secondary: #d1d5db; /* gray-300 */
-    --text-muted: #cbd5e1; /* slate-300 - improved contrast */
-    --text-light: #94a3b8; /* slate-400 - better visibility */
-    --text-accent: #60a5fa; /* blue-400 */
-    --text-button: #ffffff; /* white */
-    --text-danger: #f87171; /* red-400 */
-    --text-danger-strong: #fca5a5; /* red-300 */
-    --text-info-strong: #93c5fd; /* blue-300 */
-    --text-warn-strong: #67e8f9; /* cyan-300 - soft, friendly cyan text */
-    --text-success-strong: #6ee7b7; /* green-300 */
-    --text-pending-strong: #d6d3d1; /* stone-300 */
+    --text-primary: #ecebe8;
+    --text-secondary: #c2c0bb;
+    --text-muted: #8f8d88;
+    --text-light: #6f6d68;
+    --text-accent: #f0b27f;
+    --text-button: var(--on-accent);
+    --text-danger: #f08a82;
+    --text-danger-strong: #f6aaa3;
+    --text-info-strong: #f0c9a3;
+    --text-warn-strong: #e8c66f;
+    --text-success-strong: #7ed3a6;
+    --text-pending-strong: #c2c0bb;
 
-    --border-primary: #475569; /* slate-600 - more visible */
-    --border-secondary: #64748b; /* slate-500 - better contrast */
-    --border-accent: #1d4ed8; /* blue-700 */
-    --border-danger: #ef4444; /* red-500 */
-    --border-focus: #3b82f6; /* blue-500 */
-    --ring-focus: #1e40af; /* blue-800 */
-    
-    --scrollbar-track: #2d3748; /* gray-800 */
-    --scrollbar-thumb: #4a5568; /* gray-600 */
-    --scrollbar-thumb-hover: #718096; /* gray-500 */
-}
+    --border-primary: #2b2d31;
+    --border-secondary: #3a3d42;
+    --border-accent: #7a5330;
+    --border-danger: #a04a42;
+    --border-focus: var(--accent);
+    --ring-focus: #4a3522;
 
-/* Dark Theme Variants */
-.dark.theme-dark-emerald {
-    --bg-primary: #1a2420; /* lighter dark with emerald tint */
-    --bg-secondary: #243028; /* medium dark with emerald hint */
-    --bg-tertiary: #2e3c30; /* lighter dark with emerald hint */
-    --bg-accent: #384838; /* visible emerald accent */
-    --bg-accent-hover: #425440; /* lighter emerald accent */
-    --bg-button: #059669; /* keep button visible */
-    --bg-button-hover: #10b981; /* keep button visible */
-    --bg-input: #2e3c30; /* darker emerald input background */
-    --text-accent: #7dd3ae; /* muted pastel emerald text */
-    --border-primary: #3a4540; /* visible emerald border */
-    --border-secondary: #485548; /* lighter emerald border */
-    --border-accent: #556550; /* medium emerald border */
-    --border-focus: #10b981; /* keep focus visible */
-    --ring-focus: #384838; /* visible ring */
-    --bg-audio-player: var(--bg-tertiary);
-    --scrollbar-thumb: #485548; /* emerald tinted scrollbar */
-    --scrollbar-thumb-hover: #556655; /* brighter emerald on hover */
-}
-
-.dark.theme-dark-purple {
-    --bg-primary: #1e1a24; /* lighter dark with purple tint */
-    --bg-secondary: #2a2430; /* medium dark with purple hint */
-    --bg-tertiary: #36303c; /* lighter dark with purple hint */
-    --bg-accent: #423c48; /* visible purple accent */
-    --bg-accent-hover: #4e4854; /* lighter purple accent */
-    --bg-button: #7c3aed; /* keep button visible */
-    --bg-button-hover: #8b5cf6; /* keep button visible */
-    --bg-input: #36303c; /* darker purple input background */
-    --text-accent: #b8a5d4; /* muted pastel purple text */
-    --border-primary: #484050; /* visible purple border */
-    --border-secondary: #555058; /* lighter purple border */
-    --border-accent: #626060; /* medium purple border */
-    --border-focus: #8b5cf6; /* keep focus visible */
-    --ring-focus: #423c48; /* visible ring */
-    --bg-audio-player: var(--bg-tertiary);
-    --scrollbar-thumb: #555058; /* purple tinted scrollbar */
-    --scrollbar-thumb-hover: #666068; /* brighter purple on hover */
-}
-
-.dark.theme-dark-rose {
-    --bg-primary: #241a20; /* lighter dark with rose tint */
-    --bg-secondary: #302428; /* medium dark with rose hint */
-    --bg-tertiary: #3c3030; /* lighter dark with rose hint */
-    --bg-accent: #483c40; /* visible rose accent */
-    --bg-accent-hover: #54484c; /* lighter rose accent */
-    --bg-button: #e11d48; /* keep button visible */
-    --bg-button-hover: #f43f5e; /* keep button visible */
-    --bg-input: #3c3030; /* darker rose input background */
-    --text-accent: #d4a5b4; /* muted pastel rose text */
-    --border-primary: #504048; /* visible rose border */
-    --border-secondary: #585050; /* lighter rose border */
-    --border-accent: #606058; /* medium rose border */
-    --border-focus: #f43f5e; /* keep focus visible */
-    --ring-focus: #483c40; /* visible ring */
-    --bg-audio-player: var(--bg-tertiary);
-    --scrollbar-thumb: #554850; /* rose tinted scrollbar */
-    --scrollbar-thumb-hover: #665860; /* brighter rose on hover */
-}
-
-.dark.theme-dark-amber {
-    --bg-primary: #24201a; /* lighter dark with amber tint */
-    --bg-secondary: #302824; /* medium dark with amber hint */
-    --bg-tertiary: #3c342e; /* lighter dark with amber hint */
-    --bg-accent: #484038; /* visible amber accent */
-    --bg-accent-hover: #544c42; /* lighter amber accent */
-    --bg-button: #d97706; /* keep button visible */
-    --bg-button-hover: #f59e0b; /* keep button visible */
-    --bg-input: #3c342e; /* darker amber input background */
-    --text-accent: #d4c5a5; /* muted pastel amber text */
-    --border-primary: #504840; /* visible amber border */
-    --border-secondary: #585548; /* lighter amber border */
-    --border-accent: #606250; /* medium amber border */
-    --border-focus: #f59e0b; /* keep focus visible */
-    --ring-focus: #484038; /* visible ring */
-    --bg-audio-player: var(--bg-tertiary);
-    --scrollbar-thumb: #585548; /* amber tinted scrollbar */
-    --scrollbar-thumb-hover: #686658; /* brighter amber on hover */
-}
-
-.dark.theme-dark-teal {
-    --bg-primary: #1a2424; /* lighter dark with teal tint */
-    --bg-secondary: #243030; /* medium dark with teal hint */
-    --bg-tertiary: #2e3c3c; /* lighter dark with teal hint */
-    --bg-accent: #384848; /* visible teal accent */
-    --bg-accent-hover: #425454; /* lighter teal accent */
-    --bg-button: #0d9488; /* keep button visible */
-    --bg-button-hover: #14b8a6; /* keep button visible */
-    --bg-input: #2e3c3c; /* darker teal input background */
-    --text-accent: #a5d4d0; /* muted pastel teal text */
-    --border-primary: #404848; /* visible teal border */
-    --border-secondary: #485555; /* lighter teal border */
-    --border-accent: #506262; /* medium teal border */
-    --border-focus: #14b8a6; /* keep focus visible */
-    --ring-focus: #384848; /* visible ring */
-    --bg-audio-player: var(--bg-tertiary);
-    --scrollbar-thumb: #485555; /* teal tinted scrollbar */
-    --scrollbar-thumb-hover: #586666; /* brighter teal on hover */
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: #3a3d42;
+    --scrollbar-thumb-hover: #4a4e55;
 }
 
 /* Modern UI styles */
@@ -344,7 +172,9 @@ html { /* Apply base colors to html for smoother transitions */
     background-color: var(--bg-primary); 
     color: var(--text-primary); 
     transition: background-color 0.3s, color 0.3s; 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Helvetica Neue", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", Roboto, sans-serif;
 }
 html { 
     height: 100%; 
@@ -4646,14 +4476,17 @@ select:disabled {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: var(--tracking-wide);
-    color: var(--text-muted);
-    background: var(--bg-tertiary);
+    color: var(--text-light);
+    background: transparent;
     border-top: 1px solid var(--border-primary);
-    border-bottom: 1px solid var(--border-primary);
-    padding: 6px var(--sp-3);
+    padding: 14px var(--sp-4) 6px;
     margin: 0;
     line-height: var(--lh-tight);
-    text-align: center;
+    text-align: left;
+}
+.recording-group:first-of-type .recording-group-header,
+.recording-group-header:first-child {
+    border-top: 0;
 }
 
 /* Each section group wraps its rows for divider scoping. */
@@ -4675,6 +4508,13 @@ select:disabled {
    extend edge-to-edge. No card chrome. */
 .recording-row {
     position: relative;
+    border-radius: 0;
+}
+.recording-row.is-active {
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+.recording-row h4 {
+    letter-spacing: 0.005em;
 }
 
 /* Chat timestamp chips: the recording chat cites moments as bracketed

@@ -37,25 +37,25 @@
 
     <!-- locol_vocol: current transcription engine (admins can switch) -->
     {% if current_user.is_authenticated %}
-    <div v-if="engineInfo" class="hidden md:inline-flex items-center gap-1.5 whitespace-nowrap" :title="t('engine.tooltip')">
-        <i class="fas fa-microphone-lines text-[var(--text-accent)] text-xs"></i>
+    <div v-if="engineInfo" class="hidden md:inline-flex items-center gap-1.5 whitespace-nowrap header-meta-group" :title="t('engine.tooltip')">
+        <i class="fas fa-microphone-lines text-[var(--text-light)] text-xs"></i>
         <select v-if="engineInfo.can_change" :value="engineInfo.connector" @change="switchEngine($event.target.value)"
                 :disabled="engineSwitching"
-                class="text-xs font-medium px-2 py-1 rounded-full border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] cursor-pointer">
+                class="header-meta header-meta--select cursor-pointer">
             <option v-for="p in engineInfo.presets" :key="p.connector" :value="p.connector" :disabled="!p.has_key">
                 ${ p.label }${ p.has_key ? '' : t('engine.noKey') }
             </option>
         </select>
-        <span v-else class="text-xs font-medium px-2 py-1 rounded-full border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]">${ engineLabel }</span>
+        <span v-else class="header-meta">${ engineLabel }</span>
     </div>
     {% endif %}
 
     <!-- locol_vocol: estimated remaining API balance -->
     {% if current_user.is_authenticated %}
     <span v-if="billingSummary"
-       class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] whitespace-nowrap"
+       class="hidden lg:inline-flex header-meta whitespace-nowrap"
        :title="billingSummary.tooltip">
-        <i class="fas fa-wallet text-[var(--text-accent)]"></i>
+        <i class="fas fa-wallet text-[var(--text-light)]"></i>
         <span v-if="billingSummary.remaining_usd !== null"
               :class="billingSummary.remaining_usd < 1 ? 'text-[var(--text-danger)]' : ''">
             ${ t('cost.balance') } $${ billingSummary.remaining_usd.toFixed(2) }
@@ -65,9 +65,9 @@
     <!-- locol_vocol: live ElevenLabs credits of the key in use (hover: every key) -->
     <span v-if="elevenlabsUsage && elevenlabsUsage.active"
        @click="refreshElevenlabsUsage(true)"
-       class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] whitespace-nowrap cursor-pointer"
+       class="hidden sm:inline-flex header-meta whitespace-nowrap cursor-pointer"
        :title="elevenlabsUsage.tooltip">
-        <i class="fas fa-coins text-[var(--text-accent)]"></i>
+        <i class="fas fa-coins text-[var(--text-light)]"></i>
         <span v-if="elevenlabsUsage.active.remaining !== null"
               :class="elevenlabsUsage.active.remaining < 2500 ? 'text-[var(--text-danger)]' : ''">
             ${ t('cost.credits') } ${ elevenlabsUsage.active.remaining.toLocaleString() } / ${ elevenlabsUsage.active.limit.toLocaleString() }
@@ -174,23 +174,21 @@
             </a>
             {% endif %}
             <div class="border-t border-[var(--border-primary)] my-1"></div>
-            <!-- Combined appearance row: the row opens the color scheme
-                 modal, the sun/moon pill toggles light/dark in place
-                 (click.stop keeps the menu open for instant feedback). -->
-            <div @click="openColorSchemeModal"
+            <!-- locol_vocol: appearance row is only the light/dark toggle -->
+            <div @click.stop="toggleDarkMode"
                  class="w-full text-left px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-between cursor-pointer">
                 <span class="flex items-center whitespace-nowrap">
-                    <i class="fas fa-palette mr-2 w-4 text-center"></i>
-                    <span v-text="t('modal.colorScheme')"></span>
+                    <i class="fas fa-circle-half-stroke mr-2 w-4 text-center"></i>
+                    <span v-text="isDarkMode ? t('nav.darkMode') : t('nav.lightMode')"></span>
                 </span>
                 <button @click.stop="toggleDarkMode"
                         class="flex items-center rounded-full border border-[var(--border-secondary)] bg-[var(--bg-secondary)] p-0.5 ml-3 flex-shrink-0"
                         :title="isDarkMode ? t('nav.lightMode') : t('nav.darkMode')">
-                    <span :class="!isDarkMode ? 'bg-[var(--bg-accent)] text-white' : 'text-[var(--text-muted)]'"
+                    <span :class="!isDarkMode ? 'bg-[var(--bg-accent)] text-[var(--text-accent)]' : 'text-[var(--text-muted)]'"
                           class="w-6 h-6 rounded-full flex items-center justify-center text-[11px] transition-colors">
                         <i class="fas fa-sun"></i>
                     </span>
-                    <span :class="isDarkMode ? 'bg-[var(--bg-accent)] text-white' : 'text-[var(--text-muted)]'"
+                    <span :class="isDarkMode ? 'bg-[var(--bg-accent)] text-[var(--text-accent)]' : 'text-[var(--text-muted)]'"
                           class="w-6 h-6 rounded-full flex items-center justify-center text-[11px] transition-colors">
                         <i class="fas fa-moon"></i>
                     </span>

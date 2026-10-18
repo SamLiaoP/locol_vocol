@@ -38,7 +38,7 @@
                 </audio>
                 <!-- Play/Pause -->
                 <button @click="$refs.asrEditorAudioRef?.paused ? $refs.asrEditorAudioRef.play() : $refs.asrEditorAudioRef.pause()"
-                        class="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-accent)] hover:bg-[var(--bg-accent-hover)] text-white transition-all flex-shrink-0 shadow-sm"
+                        class="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-accent)] hover:bg-[var(--bg-accent-hover)] text-[var(--text-accent)] transition-all flex-shrink-0 shadow-sm"
                         :title="modalAudioIsPlaying ? 'Pause' : 'Play'">
                     <i :class="modalAudioIsPlaying ? 'fas fa-pause' : 'fas fa-play'" class="text-sm" :style="!modalAudioIsPlaying ? 'margin-left: 2px' : ''"></i>
                 </button>

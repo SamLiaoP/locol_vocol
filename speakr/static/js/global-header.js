@@ -12,14 +12,9 @@
 
 import { useNotifications } from './modules/composables/notifications.js';
 
-const SCHEMES = ['blue', 'emerald', 'purple', 'rose', 'amber', 'teal'];
-
+// locol_vocol: two themes only (light / dark); the colour-scheme variants are gone.
 function applyTheme(dark) {
-    const root = document.documentElement;
-    root.classList.toggle('dark', dark);
-    SCHEMES.forEach(s => root.classList.remove(`theme-light-${s}`, `theme-dark-${s}`));
-    const scheme = localStorage.getItem('colorScheme') || 'blue';
-    if (scheme !== 'blue') root.classList.add(`theme-${dark ? 'dark' : 'light'}-${scheme}`);
+    document.documentElement.classList.toggle('dark', dark);
 }
 
 function ensureVue() {

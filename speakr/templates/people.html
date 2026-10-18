@@ -17,7 +17,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
     <style>
         /* locol_vocol people page: small, self-contained styles on top of the primitives */
-        .person-card { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 0.75rem; }
+        .person-card { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 14px; transition: border-color .15s, box-shadow .15s; }
+        .person-card:hover { border-color: var(--border-secondary); box-shadow: var(--shadow-sm); }
+        .person-avatar { width: 40px; height: 40px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+                         background: var(--accent-soft); color: var(--text-accent); font-weight: 600; font-size: 15px; margin-top: 2px; }
         .person-card.is-selected { border-color: var(--border-accent); box-shadow: 0 0 0 1px var(--border-accent) inset; }
         .clip-row { background: var(--bg-tertiary); border-radius: 0.5rem; }
         .clip-progress { height: 4px; background: var(--border-primary); border-radius: 2px; overflow: hidden; }
@@ -111,9 +114,10 @@
                     <label class="flex items-center pt-1 cursor-pointer" title="${esc(t('people.selectForMerge'))}">
                         <input type="checkbox" class="sel-box" data-id="${p.id}" ${sel ? 'checked' : ''}>
                     </label>
+                    <div class="person-avatar flex-shrink-0" aria-hidden="true">${esc((p.name || '?').trim().slice(0, 1).toUpperCase())}</div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 min-w-0">
-                            <span class="font-semibold text-lg truncate name-label">${esc(p.name)}</span>
+                            <span class="font-semibold text-base truncate name-label">${esc(p.name)}</span>
                             <button class="btn btn--icon btn--sm rename-btn" data-id="${p.id}" title="${esc(t('people.rename'))}"><i class="fas fa-pen"></i></button>
                         </div>
                         <div class="text-xs text-[var(--text-muted)] mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">

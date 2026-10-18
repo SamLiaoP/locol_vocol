@@ -93,30 +93,12 @@ export function useUI(state, utils, processedTranscription) {
     };
 
     // Apply a color scheme
+    // locol_vocol: colour-scheme variants were removed; only light/dark remain.
+    // Kept as a no-op so callers and stored preferences stay harmless.
     const applyColorScheme = (schemeId, mode = null) => {
-        const targetMode = mode || (isDarkMode.value ? 'dark' : 'light');
-        const scheme = colorSchemes[targetMode].find(s => s.id === schemeId);
-
-        if (!scheme) {
-            console.warn(`Color scheme '${schemeId}' not found for mode '${targetMode}'`);
-            return;
-        }
-
-        // Remove all theme classes
-        const allThemeClasses = [
-            ...colorSchemes.light.map(s => s.class),
-            ...colorSchemes.dark.map(s => s.class)
-        ].filter(c => c !== '');
-
-        document.documentElement.classList.remove(...allThemeClasses);
-
-        // Add new theme class if not default
-        if (scheme.class) {
-            document.documentElement.classList.add(scheme.class);
-        }
-
-        currentColorScheme.value = schemeId;
-        localStorage.setItem('colorScheme', schemeId);
+        const stale = Array.from(document.documentElement.classList).filter(c => /^theme-(light|dark)-/.test(c));
+        if (stale.length) document.documentElement.classList.remove(...stale);
+        currentColorScheme.value = 'blue';
     };
 
     // Initialize color scheme from storage

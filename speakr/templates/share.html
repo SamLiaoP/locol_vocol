@@ -108,7 +108,7 @@
                         <div class="flex items-center gap-3">
                         <!-- Play/Pause -->
                         <button @click="toggleAudioPlayback"
-                                class="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-accent)] hover:bg-[var(--bg-accent-hover)] text-white transition-all flex-shrink-0 shadow-sm"
+                                class="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-accent)] hover:bg-[var(--bg-accent-hover)] text-[var(--text-accent)] transition-all flex-shrink-0 shadow-sm"
                                 :title="audioIsPlaying ? 'Pause' : 'Play'">
                             <i :class="audioIsPlaying ? 'fas fa-pause' : 'fas fa-play'" class="text-sm" :style="!audioIsPlaying ? 'margin-left: 2px' : ''"></i>
                         </button>
