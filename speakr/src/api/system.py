@@ -198,6 +198,35 @@ def billing_summary():
     })
 
 
+@system_bp.route('/api/elevenlabs/usage', methods=['GET'])
+@login_required
+def elevenlabs_usage():
+    """locol_vocol: live credit usage of every configured ElevenLabs key.
+
+    Answers {enabled: false} when the active engine is not ElevenLabs. Results
+    are cached for 60 s per key pool; `?refresh=1` bypasses the cache.
+    """
+    import time
+    from src.services.transcription import get_registry
+    try:
+        connector = get_registry().get_active_connector()
+    except Exception as e:
+        return jsonify({'enabled': False, 'error': str(e)[:200]})
+    if getattr(connector, 'PROVIDER_NAME', '') != 'elevenlabs' or not hasattr(connector, 'usage_report'):
+        return jsonify({'enabled': False})
+    pool = tuple(getattr(connector, 'api_keys', ()))
+    cache = current_app.extensions.setdefault('locol_elevenlabs_usage_cache', {})
+    now = time.time()
+    fresh = cache.get('pool') == pool and cache.get('at', 0) > now - 60
+    if request.args.get('refresh') == '1' or not fresh:
+        cache.update(pool=pool, at=now, data=connector.usage_report())
+    rows = cache['data']
+    active = connector.active_key_index
+    for r in rows:
+        r['active'] = (r.get('index') == active)
+    return jsonify({'enabled': True, 'keys': rows, 'fetched_at': cache['at']})
+
+
 @system_bp.route('/api/user/token-budget', methods=['GET'])
 @login_required
 def get_user_token_budget():

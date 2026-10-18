@@ -419,6 +419,8 @@ class ConnectorRegistry:
             base_url = os.environ.get('TRANSCRIPTION_BASE_URL', '').split('#')[0].strip()
             return {
                 'api_key': os.environ.get('TRANSCRIPTION_API_KEY', ''),
+                # extra keys, comma-separated; used as fallbacks when one runs out of credits
+                'api_keys': os.environ.get('ELEVENLABS_API_KEYS', '').split('#')[0].strip(),
                 'base_url': base_url or 'https://api.elevenlabs.io',
                 'model': os.environ.get('TRANSCRIPTION_MODEL', 'scribe_v2') or 'scribe_v2',
             }

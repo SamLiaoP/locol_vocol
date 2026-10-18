@@ -62,6 +62,19 @@
         </span>
         <span v-else>${ t('cost.spent') } $${ billingSummary.spend_usd.toFixed(2) }</span>
     </span>
+    <!-- locol_vocol: live ElevenLabs credits of the key in use (hover: every key) -->
+    <span v-if="elevenlabsUsage && elevenlabsUsage.active"
+       @click="refreshElevenlabsUsage(true)"
+       class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] whitespace-nowrap cursor-pointer"
+       :title="elevenlabsUsage.tooltip">
+        <i class="fas fa-coins text-[var(--text-accent)]"></i>
+        <span v-if="elevenlabsUsage.active.remaining !== null"
+              :class="elevenlabsUsage.active.remaining < 2500 ? 'text-[var(--text-danger)]' : ''">
+            ${ t('cost.credits') } ${ elevenlabsUsage.active.remaining.toLocaleString() } / ${ elevenlabsUsage.active.limit.toLocaleString() }
+        </span>
+        <span v-else>${ t('cost.credits') } ${ t('cost.creditsUnknown') }</span>
+        <span v-if="elevenlabsUsage.keys.length > 1" class="text-[var(--text-muted)]">${ elevenlabsUsage.activeIndex + 1 }/${ elevenlabsUsage.keys.length }</span>
+    </span>
     {% endif %}
 
     <!-- User menu -->

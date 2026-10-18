@@ -8,6 +8,9 @@ speaker labels stay consistent for the entire recording.
 
 Config (from env / admin settings via the registry):
 - api_key:  TRANSCRIPTION_API_KEY      (required; sent as `xi-api-key`)
+- api_keys: ELEVENLABS_API_KEYS        (optional, comma-separated extra keys; when a
+            request is refused for lack of credits the next key is tried, and the key
+            that worked last is preferred afterwards)
 - base_url: TRANSCRIPTION_BASE_URL     (default https://api.elevenlabs.io)
 - model:    TRANSCRIPTION_MODEL        (default scribe_v2)
 
@@ -21,6 +24,8 @@ Post-processing (Chinese-oriented, deterministic):
 import io
 import re
 import logging
+import threading
+from datetime import datetime, timezone
 from typing import Dict, Any, Set, Optional, List
 
 import httpx
@@ -63,7 +68,18 @@ class ElevenLabsTranscriptionConnector(BaseTranscriptionConnector):
     )
 
     def __init__(self, config: Dict[str, Any]):
-        self.api_key = (config.get('api_key') or '').strip()
+        # Key pool: the active key first (settings/env TRANSCRIPTION_API_KEY), then any
+        # extra keys from ELEVENLABS_API_KEYS. Duplicates and blanks are dropped.
+        raw_extra = str(config.get('api_keys') or '').replace('\n', ',').replace(';', ',')
+        pool: List[str] = []
+        for k in [config.get('api_key') or ''] + raw_extra.split(','):
+            k = k.strip()
+            if k and k not in pool:
+                pool.append(k)
+        self.api_keys: List[str] = pool
+        self.api_key = pool[0] if pool else ''
+        self._key_index = 0          # key tried first; moves to whichever key last succeeded
+        self._key_lock = threading.Lock()
         base = (config.get('base_url') or 'https://api.elevenlabs.io').strip()
         self.base_url = base.rstrip('/')
         model = (config.get('model') or '').strip()
@@ -74,8 +90,77 @@ class ElevenLabsTranscriptionConnector(BaseTranscriptionConnector):
         super().__init__(config)
 
     def _validate_config(self) -> None:
-        if not self.api_key:
+        if not self.api_keys:
             raise ConfigurationError("api_key is required for the ElevenLabs connector (set TRANSCRIPTION_API_KEY)")
+
+    # ------------------------------------------------------------ key pool
+
+    @staticmethod
+    def mask_key(key: str) -> str:
+        key = key or ''
+        return f"{key[:6]}…{key[-4:]}" if len(key) > 12 else (key[:4] + '…' if key else '')
+
+    def _key_order(self) -> List[int]:
+        """Indexes to try, starting from the preferred key and wrapping around."""
+        n = len(self.api_keys)
+        with self._key_lock:
+            start = self._key_index if 0 <= self._key_index < n else 0
+        return [(start + i) % n for i in range(n)]
+
+    def _prefer_key(self, idx: int) -> None:
+        with self._key_lock:
+            if idx != self._key_index:
+                logger.info("ElevenLabs: now preferring key #%d (%s)", idx + 1, self.mask_key(self.api_keys[idx]))
+            self._key_index = idx
+
+    @property
+    def active_key_index(self) -> int:
+        with self._key_lock:
+            return self._key_index
+
+    @staticmethod
+    def _is_quota_error(status_code: int, body: str) -> bool:
+        """ElevenLabs answers 401 with code `quota_exceeded` when credits run out."""
+        b = (body or '').lower()
+        return status_code in (401, 402, 429) and any(
+            s in b for s in ('quota_exceeded', 'exceeds your quota', 'insufficient_quota', 'insufficient credits'))
+
+    def usage_report(self, timeout: float = 10.0) -> List[Dict[str, Any]]:
+        """Credit usage of every key in the pool via GET /v1/user/subscription.
+
+        A key created without the `user_read` permission cannot read its own
+        subscription; that key is reported with an `error` instead of numbers.
+        """
+        out: List[Dict[str, Any]] = []
+        active = self.active_key_index
+        for i, key in enumerate(self.api_keys):
+            row: Dict[str, Any] = {'index': i, 'masked': self.mask_key(key), 'active': i == active,
+                                   'used': None, 'limit': None, 'remaining': None, 'reset_at': None,
+                                   'tier': None, 'error': None}
+            try:
+                with httpx.Client(base_url=self.base_url, headers={"xi-api-key": key},
+                                  timeout=httpx.Timeout(timeout, connect=10.0)) as client:
+                    resp = client.get("/v1/user/subscription")
+                if resp.status_code != 200:
+                    detail = {}
+                    try:
+                        detail = (resp.json() or {}).get('detail') or {}
+                    except Exception:
+                        pass
+                    status = detail.get('status') if isinstance(detail, dict) else None
+                    row['error'] = 'missing_permissions' if status == 'missing_permissions' else f"HTTP {resp.status_code}"
+                else:
+                    d = resp.json() or {}
+                    used, limit = d.get('character_count'), d.get('character_limit')
+                    row.update(used=used, limit=limit, tier=d.get('tier'),
+                               remaining=(limit - used) if isinstance(used, int) and isinstance(limit, int) else None)
+                    reset = d.get('next_character_count_reset_unix')
+                    if isinstance(reset, (int, float)):
+                        row['reset_at'] = datetime.fromtimestamp(reset, tz=timezone.utc).isoformat()
+            except Exception as e:  # network error, timeout, bad JSON
+                row['error'] = str(e)[:120]
+            out.append(row)
+        return out
 
     # ------------------------------------------------------------ request
 
@@ -117,14 +202,27 @@ class ElevenLabsTranscriptionConnector(BaseTranscriptionConnector):
             logger.info("ElevenLabs: submitting %s (%.1f MB) model=%s lang=%s diarize=%s num_speakers=%s",
                         request.filename, len(audio) / 1048576, self.model,
                         form.get('language_code', 'auto'), form.get('diarize'), form.get('num_speakers', '-'))
-            with httpx.Client(base_url=self.base_url, headers={"xi-api-key": self.api_key},
-                              timeout=httpx.Timeout(self.timeout, connect=30.0)) as client:
-                resp = client.post("/v1/speech-to-text", data=fields, files=files)
-            if resp.status_code != 200:
-                raise ProviderError(f"ElevenLabs transcription failed ({resp.status_code}): {resp.text[:400]}",
-                                    provider=self.PROVIDER_NAME, status_code=resp.status_code)
-            result = resp.json()
-            return self._parse_result(result, diarized=bool(request.diarize))
+            last_error: Optional[ProviderError] = None
+            order = self._key_order()
+            for attempt, idx in enumerate(order):
+                key = self.api_keys[idx]
+                with httpx.Client(base_url=self.base_url, headers={"xi-api-key": key},
+                                  timeout=httpx.Timeout(self.timeout, connect=30.0)) as client:
+                    resp = client.post("/v1/speech-to-text", data=fields, files=files)
+                if resp.status_code == 200:
+                    self._prefer_key(idx)
+                    return self._parse_result(resp.json(), diarized=bool(request.diarize))
+                last_error = ProviderError(
+                    f"ElevenLabs transcription failed ({resp.status_code}): {resp.text[:4000]}",
+                    provider=self.PROVIDER_NAME, status_code=resp.status_code)
+                # Out of credits on this key: fall through to the next one, if any.
+                if self._is_quota_error(resp.status_code, resp.text) and attempt < len(order) - 1:
+                    logger.warning("ElevenLabs: key #%d (%s) is out of credits, trying key #%d",
+                                   idx + 1, self.mask_key(key), order[attempt + 1] + 1)
+                    continue
+                raise last_error
+            raise last_error or ProviderError("ElevenLabs transcription failed: no API key configured",
+                                              provider=self.PROVIDER_NAME)
         except (TranscriptionError, ConfigurationError):
             raise
         except Exception as e:

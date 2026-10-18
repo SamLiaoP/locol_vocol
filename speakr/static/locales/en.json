@@ -893,6 +893,9 @@
     "processingTimeoutGuidance": "This can happen with very long recordings. Try splitting the audio into smaller parts.",
     "processingTimeoutMessage": "The transcription took too long to complete.",
     "quotaExceeded": "Storage quota exceeded",
+    "creditsExhausted": "Credits Exhausted",
+    "creditsExhaustedGuidance": "Top up or upgrade the plan on the transcription service, then reprocess this recording.",
+    "creditsExhaustedMessage": "The transcription service account does not have enough credits for this recording.",
     "rateLimitExceeded": "Rate Limit Exceeded",
     "rateLimitExceededGuidance": "Please wait a few minutes and try reprocessing.",
     "rateLimitExceededMessage": "Too many requests were sent to the transcription service.",
@@ -2324,7 +2327,13 @@
     "balanceTooltip": "Top-up ${{topup}} ({{date}}) − tracked spend ${{spend}}. Estimate, not an invoice.",
     "chunkProgress": "{{done}} / {{total}} chunks done",
     "elapsed": "Elapsed",
-    "remaining": "Remaining"
+    "remaining": "Remaining",
+    "credits": "ElevenLabs credits",
+    "creditsUnknown": "unavailable",
+    "creditsNoPermission": "this key lacks the user_read permission, usage cannot be read",
+    "creditsKeyLine": "Key {{n}} ({{key}}): used {{used}} / {{limit}}, remaining {{remaining}}, resets {{reset}}",
+    "creditsKeyError": "Key {{n}} ({{key}}): {{error}}",
+    "creditsActiveMark": "  ← in use"
   },
   "engine": {
     "tooltip": "Current transcription engine. Switching takes effect immediately for new uploads.",

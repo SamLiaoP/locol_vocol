@@ -93,7 +93,17 @@ const parseUnformattedError = (text) => {
     // Known error patterns
     const patterns = [
         {
-            patterns: ['maximum content size limit', 'file too large', '413', 'payload too large', 'exceeded'],
+            // Quota / credits exhausted. Checked first: provider bodies such as
+            // ElevenLabs' `quota_exceeded` also contain the word "exceeded".
+            patterns: ['quota_exceeded', 'quota exceeded', 'exceeds your quota', 'insufficient credits', 'insufficient quota', 'insufficient_quota', 'credits remaining', 'out of credits'],
+            title: _t('errors.creditsExhausted', 'Credits Exhausted'),
+            message: _t('errors.creditsExhaustedMessage', 'The transcription service account does not have enough credits for this recording.'),
+            guidance: _t('errors.creditsExhaustedGuidance', 'Top up or upgrade the plan on the transcription service, then reprocess this recording.'),
+            icon: 'fa-credit-card',
+            type: 'billing'
+        },
+        {
+            patterns: ['maximum content size limit', 'file too large', 'payload too large', 'content too large', 'request entity too large', '413 payload'],
             title: _t('errors.fileTooLargeTitle', 'File Too Large'),
             message: _t('errors.fileTooLargeMessage', 'The audio file exceeds the maximum size allowed by the transcription service.'),
             guidance: _t('errors.fileTooLargeGuidance', 'Try enabling audio chunking in your settings, or compress the audio file before uploading.'),
@@ -117,7 +127,7 @@ const parseUnformattedError = (text) => {
             type: 'auth'
         },
         {
-            patterns: ['rate limit', 'too many requests', '429', 'quota exceeded'],
+            patterns: ['rate limit', 'too many requests', '429'],
             title: _t('errors.rateLimitExceeded', 'Rate Limit Exceeded'),
             message: _t('errors.rateLimitExceededMessage', 'Too many requests were sent to the transcription service.'),
             guidance: _t('errors.rateLimitExceededGuidance', 'Please wait a few minutes and try reprocessing.'),
@@ -184,8 +194,8 @@ const parseUnformattedError = (text) => {
     }
 
     // Truncate if too long
-    if (cleanMessage.length > 200) {
-        cleanMessage = cleanMessage.substring(0, 200) + '...';
+    if (cleanMessage.length > 1000) {
+        cleanMessage = cleanMessage.substring(0, 1000) + '...';
     }
 
     return {
@@ -4017,8 +4027,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             setInterval(refreshBillingSummary, 60000);
             watch(() => selectedRecording.value?.status, (st, prev) => { if (prev && st !== prev) refreshBillingSummary(); });
 
+            // locol_vocol: live ElevenLabs credits per key, shown in the header
+            const elevenlabsUsage = ref(null);
+            const refreshElevenlabsUsage = async (force = false) => {
+                try {
+                    const r = await fetch('/api/elevenlabs/usage' + (force ? '?refresh=1' : ''));
+                    if (!r.ok) return;
+                    const d = await r.json();
+                    if (!d.enabled || !Array.isArray(d.keys) || d.keys.length === 0) { elevenlabsUsage.value = null; return; }
+                    const keys = d.keys;
+                    const activeIndex = Math.max(0, keys.findIndex(k => k.active));
+                    const fmt = (n) => (typeof n === 'number' ? n.toLocaleString() : '?');
+                    const lines = keys.map((k, i) => {
+                        const line = k.error
+                            ? t('cost.creditsKeyError', { n: i + 1, key: k.masked, error: k.error === 'missing_permissions' ? t('cost.creditsNoPermission') : k.error })
+                            : t('cost.creditsKeyLine', { n: i + 1, key: k.masked, used: fmt(k.used), limit: fmt(k.limit), remaining: fmt(k.remaining), reset: k.reset_at ? k.reset_at.slice(0, 10) : '-' });
+                        return line + (i === activeIndex ? t('cost.creditsActiveMark') : '');
+                    });
+                    elevenlabsUsage.value = { keys, activeIndex, active: keys[activeIndex], tooltip: lines.join('\n') };
+                } catch (e) { /* ignore */ }
+            };
+            setInterval(refreshElevenlabsUsage, 300000);
+            watch(() => selectedRecording.value?.status, (st, prev) => { if (prev && st !== prev) refreshElevenlabsUsage(true); });
+
             onMounted(async () => {
                 refreshBillingSummary();
+                refreshElevenlabsUsage();
                 refreshEngineInfo();
                 // Get config from data attributes
                 const appElement = document.getElementById('app');
@@ -4592,6 +4626,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 displaySpeakerLabel,
                 inlineRenameSpeakerId, inlineRenameRowKey, inlineRenameValue, inlineRenameInputRef,
                 transcriptionProgress, transcriptionProgressInfo, billingSummary, refreshBillingSummary,
+                elevenlabsUsage, refreshElevenlabsUsage,
                 engineInfo, engineLabel, engineSwitching, switchEngine, refreshEngineInfo,
                 startInlineSpeakerRename, commitInlineSpeakerRename, cancelInlineSpeakerRename, onInlineRenameEnter, onInlineRenameBlur,
                 groupedRecordings,

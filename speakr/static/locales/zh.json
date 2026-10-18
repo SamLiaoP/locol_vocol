@@ -893,6 +893,9 @@
     "processingTimeoutGuidance": "這在很長的錄音上可能發生。請嘗試將音訊拆分為更小的部分。",
     "processingTimeoutMessage": "轉錄耗時過長未能完成。",
     "quotaExceeded": "儲存配額已超出",
+    "creditsExhausted": "額度不足",
+    "creditsExhaustedGuidance": "請到轉錄服務的訂閱頁儲值或升級方案，完成後再對這支錄音重新轉錄。",
+    "creditsExhaustedMessage": "轉錄服務帳號的額度（credits）不足以處理這支錄音。",
     "rateLimitExceeded": "已超過速率限制",
     "rateLimitExceededGuidance": "請等待幾分鐘後再重新處理。",
     "rateLimitExceededMessage": "向轉錄服務傳送的請求過多。",
@@ -2324,7 +2327,13 @@
     "balanceTooltip": "儲值 ${{topup}}（{{date}}）− 本系統累計花費 ${{spend}}。這是估算值，不是帳單值。",
     "chunkProgress": "第 {{done}} / {{total}} 段完成",
     "elapsed": "已用",
-    "remaining": "預計還需"
+    "remaining": "預計還需",
+    "credits": "ElevenLabs 剩餘",
+    "creditsUnknown": "無法查詢",
+    "creditsNoPermission": "這把 key 沒有 user_read 權限，無法查詢用量",
+    "creditsKeyLine": "Key {{n}}（{{key}}）：已用 {{used}} / {{limit}}，剩餘 {{remaining}}，{{reset}} 重置",
+    "creditsKeyError": "Key {{n}}（{{key}}）：{{error}}",
+    "creditsActiveMark": "　← 使用中"
   },
   "engine": {
     "tooltip": "目前使用的轉錄引擎。切換後立即生效，之後上傳的錄音會用新引擎。",
