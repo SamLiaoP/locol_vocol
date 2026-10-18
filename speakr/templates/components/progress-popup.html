@@ -182,10 +182,10 @@
                             item.friendlyError.type === 'service_error' ? 'text-purple-500' :
                             'text-red-400'
                         ]">${item.friendlyError.title}</span>
-                        <span v-if="item.friendlyError.guidance" class="text-[10px] text-[var(--text-muted)] block truncate">${item.friendlyError.guidance}</span>
+                        <span v-if="item.friendlyError.guidance" class="text-[10px] text-[var(--text-muted)] block whitespace-normal break-words">${item.friendlyError.guidance}</span>
                     </div>
                     <!-- Fallback to raw error message if no friendly error -->
-                    <span v-else-if="item.errorMessage" class="text-[10px] text-red-400 block truncate mt-0.5">${item.errorMessage}</span>
+                    <span v-else-if="item.errorMessage" class="text-[10px] text-red-400 block whitespace-normal break-words mt-0.5">${item.errorMessage}</span>
                 </div>
             </div>
 

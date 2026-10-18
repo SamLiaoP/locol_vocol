@@ -12,6 +12,22 @@ from typing import Dict, Optional, Tuple
 
 # Known error patterns with user-friendly messages
 ERROR_PATTERNS = [
+    # Quota / credits exhausted (checked first: provider bodies such as
+    # ElevenLabs' `quota_exceeded` also contain the word "exceeded")
+    {
+        'patterns': [
+            r'quota.?exceeded',
+            r'exceeds? your quota',
+            r'insufficient.*(credits|quota|balance)',
+            r'credits? remaining',
+            r'out of credits',
+        ],
+        'title': '額度不足',
+        'message': '轉錄服務帳號的額度（credits）不足以處理這支錄音。',
+        'guidance': '請到轉錄服務的訂閱頁儲值或升級方案，完成後再對這支錄音重新轉錄。',
+        'icon': 'fa-credit-card',
+        'type': 'billing'
+    },
     # File size errors
     {
         'patterns': [
@@ -61,7 +77,6 @@ ERROR_PATTERNS = [
             r'rate.*limit',
             r'too many requests',
             r'429',
-            r'quota.*exceeded',
         ],
         'title': 'Rate Limit Exceeded',
         'message': 'Too many requests were sent to the transcription service.',
@@ -270,8 +285,8 @@ def format_error_for_user(error_text: str) -> Dict:
             clean_message = clean_message[len(prefix):].strip()
 
     # Truncate very long messages
-    if len(clean_message) > 200:
-        clean_message = clean_message[:200] + '...'
+    if len(clean_message) > 1000:
+        clean_message = clean_message[:1000] + '...'
 
     # Generate a reasonable title/message based on error code
     title = 'Processing Error'
@@ -334,7 +349,7 @@ def format_error_for_storage(error_text: str) -> str:
     # "Technical details" panel has something to show even for unknown errors
     # where the user-facing message is the same as the raw text.
     if formatted['technical']:
-        error_data['d'] = formatted['technical'][:500]  # Limit technical detail length
+        error_data['d'] = formatted['technical'][:4000]  # Limit technical detail length
 
     try:
         json_str = json.dumps(error_data, ensure_ascii=False)

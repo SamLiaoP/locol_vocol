@@ -63,6 +63,16 @@ function parseUnformattedError(text) {
     // Known error patterns
     const patterns = [
         {
+            // Quota / credits exhausted. Checked first: provider bodies such as
+            // ElevenLabs' `quota_exceeded` also contain the word "exceeded".
+            patterns: ['quota_exceeded', 'quota exceeded', 'exceeds your quota', 'insufficient credits', 'insufficient quota', 'insufficient_quota', 'credits remaining', 'out of credits'],
+            title: 'Credits Exhausted',
+            message: 'The transcription service account does not have enough credits for this recording.',
+            guidance: 'Top up or upgrade the plan on the transcription service, then reprocess this recording.',
+            icon: 'fa-credit-card',
+            type: 'billing'
+        },
+        {
             // Reverse-proxy 413 (nginx default "Request Entity Too Large", Apache
             // "Request body is too large", Nginx Proxy Manager defaults). The
             // request never reached Speakr, so enabling chunking on the Speakr
@@ -80,7 +90,7 @@ function parseUnformattedError(text) {
             // specific "File too large. Max: N MB" payload) and downstream
             // transcription-service size limits (e.g. OpenAI Whisper 25 MB).
             // Both are addressable from the Speakr side via chunking.
-            patterns: ['maximum content size limit', 'file too large', 'payload too large', 'exceeded', 'content too large'],
+            patterns: ['maximum content size limit', 'file too large', 'payload too large', 'content too large', '413 payload'],
             title: 'File Too Large',
             message: 'The audio file exceeds the maximum size allowed by the transcription service.',
             guidance: 'Enable audio chunking in your admin settings if it is off, or compress the audio file before uploading. If chunking is already enabled, the file may still exceed the per-chunk limit; lower the chunk size or compress the source.',
@@ -104,7 +114,7 @@ function parseUnformattedError(text) {
             type: 'auth'
         },
         {
-            patterns: ['rate limit', 'too many requests', '429', 'quota exceeded'],
+            patterns: ['rate limit', 'too many requests', '429'],
             title: 'Rate Limit Exceeded',
             message: 'Too many requests were sent to the transcription service.',
             guidance: 'Please wait a few minutes and try reprocessing.',
@@ -172,8 +182,8 @@ function parseUnformattedError(text) {
     }
 
     // Truncate if too long
-    if (cleanMessage.length > 200) {
-        cleanMessage = cleanMessage.substring(0, 200) + '...';
+    if (cleanMessage.length > 1000) {
+        cleanMessage = cleanMessage.substring(0, 1000) + '...';
     }
 
     return {
