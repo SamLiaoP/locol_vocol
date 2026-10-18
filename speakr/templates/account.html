@@ -514,7 +514,7 @@
                     <a href="#" id="tab-templates" class="tab" style="display:none"">
                         <i class="fas fa-file-alt"></i><span data-i18n="accountTabs.templates">Templates</span>
                     </a>
-                    <a href="#" id="tab-tokens" class="tab">
+                    <a href="#" id="tab-tokens" class="tab" style="display:none">{# locol_vocol: API tokens removed #}
                         <i class="fas fa-key"></i><span data-i18n="accountTabs.apiTokens">API Tokens</span>
                     </a>
                     <a href="#" id="tab-webhooks" class="tab" style="display:none"">
@@ -708,14 +708,6 @@
                                 {% if not password_login_disabled or current_user.is_admin %}
                                 <div class="border-t border-[var(--border-primary)] pt-3"></div>
                                 {% endif %}
-                                {% endif %}
-                                {% if not password_login_disabled or current_user.is_admin %}
-                                <div>
-                                    <span class="block text-sm font-medium text-[var(--text-muted)] mb-2" data-i18n="account.password">Password</span>
-                                    <button id="changePasswordBtn" class="btn btn--ghost w-full">
-                                        <i class="fas fa-key"></i><span data-i18n="account.changePassword">{% if has_password %}Change Password{% else %}Set Password{% endif %}</span>
-                                    </button>
-                                </div>
                                 {% endif %}
                             </div>
                         </div>
@@ -1232,6 +1224,15 @@
                             </div>
 
                         </form>
+                        <!-- locol_vocol: change-password moved here from the removed Account tab -->
+                        {% if not password_login_disabled or current_user.is_admin %}
+                        <div class="mt-8 pt-6 border-t border-[var(--border-primary)]">
+                            <span class="block text-sm font-medium text-[var(--text-muted)] mb-2" data-i18n="account.password">Password</span>
+                            <button id="changePasswordBtn" type="button" class="btn btn--ghost">
+                                <i class="fas fa-key"></i><span data-i18n="account.changePassword">{% if has_password %}Change Password{% else %}Set Password{% endif %}</span>
+                            </button>
+                        </div>
+                        {% endif %}
                       </div>
                       <div class="tab-footer">
                         <button type="submit" form="preferencesForm" class="btn btn--primary">
@@ -3013,6 +3014,7 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
 
             function switchToTab(targetName) {
                 tabs.forEach(({ tab, content, name }) => {
+                    if (!tab || !content) return;
                     if (name === targetName) {
                         tab.classList.add('is-active');
                         content.classList.remove('hidden');
@@ -3044,7 +3046,8 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
             }
 
             function showAccountTab() {
-                switchToTab('account');
+                // locol_vocol: the Account Information tab was removed; Preferences is the landing tab.
+                switchToTab('preferences');
             }
 
             function showPreferencesTab() {
