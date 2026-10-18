@@ -44,10 +44,10 @@ RUN pip install --no-cache-dir requests && \
 ###############################################################################
 FROM python:3.11-slim AS ffmpeg-stage
 
-ARG BTBN_TAG=autobuild-2026-09-28-13-06
-ARG FFMPEG_VER=n8.1.3-6-gff48edd8b2
-ARG FFMPEG_SHA256_amd64=591f8541e5d041cc3637a74de3bd9b4d020e9a7b7e891e590e440935a4933138
-ARG FFMPEG_SHA256_arm64=93201f43109ab8fbef6858d78cb8061b72b074c5cdf9cb4cad4feba18a6b7c4b
+ARG BTBN_TAG=autobuild-2026-10-14-13-03
+ARG FFMPEG_VER=n8.1.3-18-g46d899d7a0
+ARG FFMPEG_SHA256_amd64=c14ffffa2f3f908fcd9b557a6dca5f048435abed58b2d69bd9d9dc39006deb48
+ARG FFMPEG_SHA256_arm64=aa61c0d03a1a88786ffbc6d2f3cf7220c23d4065ab138e338583a2bbbd7d245c
 
 RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils \
     && rm -rf /var/lib/apt/lists/* \
