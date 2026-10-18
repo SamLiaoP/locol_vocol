@@ -2109,7 +2109,30 @@ def transcribe_with_connector(app_context, recording_id, filepath, original_file
                                 cleanup_funasr_staging,
                                 prepare_funasr_file_url,
                             )
-                        with open(actual_filepath, 'rb') as audio_file:
+                        # locol_vocol: prepend the reference clips of known people so
+                        # the engine's diarization labels can be mapped to names
+                        # afterwards (src/services/reference_clips.py).
+                        ref_plan, ref_workdir, ref_matches = None, None, None
+                        send_path, send_name, send_mime = actual_filepath, actual_filename, actual_content_type
+                        try:
+                            from src.services import reference_clips as _refclips
+                        except Exception as ref_err:
+                            _refclips = None
+                            current_app.logger.warning(f"Reference clips unavailable: {ref_err}")
+                        if _refclips and should_diarize and not funasr_active:
+                            try:
+                                ref_plan, ref_workdir = _refclips.prepare_input(recording, actual_filepath)
+                                if ref_plan:
+                                    send_path = ref_plan.input_path
+                                    send_name = os.path.basename(ref_plan.input_path)
+                                    send_mime = 'audio/flac'
+                                    current_app.logger.info("Reference clips: %d people, %.1fs prefix for recording %s",
+                                                            len(ref_plan.people), ref_plan.total, recording.id)
+                            except Exception as ref_err:
+                                current_app.logger.warning(f"Reference clips: could not build prefix, transcribing without it: {ref_err}")
+                                _refclips.cleanup(ref_workdir)
+                                ref_plan, ref_workdir = None, None
+                        with open(send_path, 'rb') as audio_file:
                             # FunASR requires an externally reachable object URL.
                             extra_options = {}
                             if funasr_active:
@@ -2119,12 +2142,13 @@ def transcribe_with_connector(app_context, recording_id, filepath, original_file
 
                             request = TranscriptionRequest(
                                 audio_file=audio_file,
-                                filename=actual_filename,
-                                mime_type=actual_content_type,
+                                filename=send_name,
+                                mime_type=send_mime,
                                 language=language,
                                 diarize=should_diarize,
                                 min_speakers=min_speakers,
-                                max_speakers=max_speakers,
+                                # the prefix adds people: a user-set maximum must allow for them
+                                max_speakers=(max_speakers + len(ref_plan.people)) if (ref_plan and max_speakers) else max_speakers,
                                 prompt=initial_prompt,
                                 hotwords=hotwords,
                                 model=transcription_model,
@@ -2145,6 +2169,17 @@ def transcribe_with_connector(app_context, recording_id, filepath, original_file
                                 # soon as the run finishes, success or failure.
                                 if funasr_active:
                                     cleanup_funasr_staging(recording)
+                                if ref_workdir:
+                                    _refclips.cleanup(ref_workdir)
+
+                        if ref_plan is not None:
+                            # Map the labels the clips received to names, then drop the
+                            # prefix so the stored transcript matches the real audio.
+                            try:
+                                ref_matches = _refclips.finish_response(response, ref_plan)
+                            except Exception as ref_err:
+                                current_app.logger.warning(f"Reference clips: post-processing failed: {ref_err}")
+                                ref_matches = None
 
                         # Record the language the service reported for this
                         # audio. Normalised because backends differ on whether
@@ -2184,6 +2219,16 @@ def transcribe_with_connector(app_context, recording_id, filepath, original_file
                             recording.speaker_embeddings_space_id = current_space_id() if recording.speaker_embeddings else None
                         except Exception as vp_err:
                             current_app.logger.warning(f"Could not reset voice samples for recording {recording.id}: {vp_err}")
+
+                        if ref_plan is not None and ref_matches:
+                            try:
+                                db.session.commit()
+                                applied = _refclips.apply_matches(recording, ref_plan, ref_matches)
+                                if applied:
+                                    current_app.logger.info(f"Reference clips: named speakers {applied} in recording {recording.id}")
+                            except Exception as ref_err:
+                                db.session.rollback()
+                                current_app.logger.warning(f"Reference clips: could not apply names: {ref_err}")
 
                     # If we reach here, transcription succeeded
                     break

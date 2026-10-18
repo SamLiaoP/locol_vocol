@@ -64,6 +64,13 @@ def apply_speaker_names(recording, user, speaker_map, regenerate_summary=False):
     if names_used:
         update_speaker_usage(names_used)
     embeddings_updated, snippets_created = update_voice_profiles(recording, label_to_name, user, seconds_by_key) or (0, 0)
+    # locol_vocol: a name given by hand means the reference clips did not
+    # recognise this person here; cut a clip so they are next time.
+    try:
+        from src.services.reference_clips import on_names_applied
+        on_names_applied(recording, label_to_name, user)
+    except Exception as e:
+        current_app.logger.warning(f"Reference clips: update after rename failed for recording {recording.id}: {e}")
     db.session.commit()
 
     # The transcript text changed: rebuild the Inquire chunks (background).

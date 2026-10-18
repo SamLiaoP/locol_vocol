@@ -68,6 +68,9 @@ def merge_speakers(target_id, source_ids, user_id):
     # combined samples below, so the merge keeps every voice condition the
     # people had instead of averaging them into one vector.
     _merge_voice_samples(target, sources)
+    # locol_vocol: reference clips follow the person as well
+    from src.services.reference_clips import move_clips
+    move_clips(sources, target)
 
     # Transfer snippets
     for source in sources:

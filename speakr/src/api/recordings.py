@@ -1019,6 +1019,12 @@ def update_transcript(recording_id):
         recording.participants = participants_from_segments(transcript_data)
 
         update_voice_profiles(recording, label_to_name, current_user, seconds_by_key)
+        # locol_vocol: reference clips for people named by hand
+        try:
+            from src.services.reference_clips import on_names_applied
+            on_names_applied(recording, label_to_name, current_user)
+        except Exception as e:
+            current_app.logger.warning(f"Reference clips: update after transcript edit failed for recording {recording.id}: {e}")
 
         db.session.commit()
 

@@ -62,10 +62,18 @@ def get_speakers():
         rows_by_speaker = {}
         for row in SpeakerVoiceSample.query.filter_by(user_id=current_user.id).all():
             rows_by_speaker.setdefault(row.speaker_id, []).append(row)
+        from src.models import SpeakerReferenceClip
+        clips_by_speaker = {}
+        for clip in SpeakerReferenceClip.query.filter_by(user_id=current_user.id).all():
+            clips_by_speaker.setdefault(clip.speaker_id, []).append(clip)
         out = []
         for speaker in speakers:
             item = speaker.to_dict()
             item['voice'] = voice_summary(speaker, rows_by_speaker.get(speaker.id, []))
+            clips = clips_by_speaker.get(speaker.id, [])
+            item['reference_clips'] = {'count': len(clips),
+                                       'seconds': round(sum(c.duration or 0 for c in clips), 1),
+                                       'hits': sum(c.hit_count or 0 for c in clips)}
             out.append(item)
         return jsonify(out)
     except Exception as e:
@@ -204,6 +212,9 @@ def delete_speaker(speaker_id):
         if not speaker:
             return jsonify({'error': 'Speaker not found'}), 404
 
+        from src.services.reference_clips import delete_clip
+        for clip in list(speaker.reference_clips):
+            delete_clip(clip)          # removes the clip file too
         db.session.delete(speaker)
         db.session.commit()
         return jsonify({'success': True})
@@ -222,6 +233,8 @@ def delete_all_speakers():
     try:
         # Bulk delete skips ORM cascades, so the voice samples go first.
         from src.models import SpeakerVoiceSample
+        from src.services.reference_clips import delete_clips_for_user
+        delete_clips_for_user(current_user.id)   # rows and files
         SpeakerVoiceSample.query.filter_by(user_id=current_user.id).delete()
         deleted_count = Speaker.query.filter_by(user_id=current_user.id).delete()
         db.session.commit()
@@ -230,6 +243,77 @@ def delete_all_speakers():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error deleting all speakers: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# --- locol_vocol: reference clips (voiceprints as audio) ---
+
+@speakers_bp.route('/speakers/<int:speaker_id>/reference_clips', methods=['GET'])
+@login_required
+def list_reference_clips(speaker_id):
+    """The clips a person is recognised by, newest first, with their source recording."""
+    from src.models import SpeakerReferenceClip
+    speaker = Speaker.query.filter_by(id=speaker_id, user_id=current_user.id).first()
+    if not speaker:
+        return jsonify({'error': 'Speaker not found'}), 404
+    clips = SpeakerReferenceClip.query.filter_by(speaker_id=speaker.id).order_by(SpeakerReferenceClip.created_at.desc()).all()
+    titles = {}
+    rec_ids = [c.recording_id for c in clips if c.recording_id]
+    if rec_ids:
+        for rec in Recording.query.filter(Recording.id.in_(rec_ids)).all():
+            titles[rec.id] = rec.title
+    out = []
+    for c in clips:
+        item = c.to_dict()
+        item['recording_title'] = titles.get(c.recording_id)
+        out.append(item)
+    return jsonify({'speaker_id': speaker.id, 'speaker_name': speaker.name, 'clips': out,
+                    'total_seconds': round(sum(c.duration or 0 for c in clips), 1)})
+
+
+@speakers_bp.route('/speakers/reference_clips/<int:clip_id>/audio', methods=['GET'])
+@login_required
+def reference_clip_audio(clip_id):
+    from src.models import SpeakerReferenceClip
+    from src.services.reference_clips import clip_abs_path
+    clip = SpeakerReferenceClip.query.filter_by(id=clip_id, user_id=current_user.id).first()
+    if not clip:
+        return jsonify({'error': 'Clip not found'}), 404
+    path = clip_abs_path(clip)
+    if not os.path.exists(path):
+        return jsonify({'error': 'Clip file missing'}), 404
+    return send_file(path, mimetype='audio/wav', conditional=True)
+
+
+@speakers_bp.route('/speakers/reference_clips/<int:clip_id>', methods=['DELETE'])
+@login_required
+def delete_reference_clip(clip_id):
+    """Remove one clip (a wrongly assigned sample); the person keeps their other clips."""
+    from src.models import SpeakerReferenceClip
+    from src.services.reference_clips import delete_clip
+    clip = SpeakerReferenceClip.query.filter_by(id=clip_id, user_id=current_user.id).first()
+    if not clip:
+        return jsonify({'error': 'Clip not found'}), 404
+    try:
+        delete_clip(clip)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting reference clip {clip_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@speakers_bp.route('/speakers/reference_clips/backfill', methods=['POST'])
+@login_required
+def backfill_reference_clips():
+    """Cut clips for every named person in the user's existing recordings."""
+    from src.services.reference_clips import backfill_user
+    try:
+        return jsonify({'success': True, **backfill_user(current_user.id)})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Reference clip backfill failed: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 

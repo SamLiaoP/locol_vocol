@@ -18,6 +18,7 @@ from .user import User, Speaker
 from .voice import VoiceEmbeddingSpace, SpeakerVoiceSample
 from .api_token import APIToken
 from .speaker_snippet import SpeakerSnippet
+from .reference_clip import SpeakerReferenceClip
 from .recording import Recording, RecordingTombstone, TranscriptChunk
 from .external_ref import RecordingExternalRef
 from .sharing import Share, InternalShare, SharedRecordingState
@@ -58,6 +59,7 @@ __all__ = [
     'Speaker',
     'VoiceEmbeddingSpace',
     'SpeakerVoiceSample',
+    'SpeakerReferenceClip',
     'APIToken',
     'SpeakerSnippet',
     # Recording models
