@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+    <title>人物 - Speakr</title>
+    {% include 'includes/theme_bootstrap.html' %}
+    {% include 'includes/loading_overlay.html' %}
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css') }}">
+    {% include 'includes/i18n_bootstrap.html' %}
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <style>
+        /* locol_vocol people page: small, self-contained styles on top of the primitives */
+        .person-card { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 0.75rem; }
+        .person-card.is-selected { border-color: var(--border-accent); box-shadow: 0 0 0 1px var(--border-accent) inset; }
+        .clip-row { background: var(--bg-tertiary); border-radius: 0.5rem; }
+        .clip-progress { height: 4px; background: var(--border-primary); border-radius: 2px; overflow: hidden; }
+        .clip-progress > div { height: 100%; width: 0; background: var(--text-accent); transition: width .1s linear; }
+        .toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 60;
+                 background: var(--bg-secondary); border: 1px solid var(--border-primary); color: var(--text-primary);
+                 padding: .6rem 1rem; border-radius: .6rem; box-shadow: 0 6px 24px rgba(0,0,0,.25); font-size: .9rem; }
+        .toast.is-error { border-color: var(--border-danger); color: var(--text-danger-strong); }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-full flex flex-col overflow-hidden">
+    {% set page_label = '人物' %}
+    {% set page_label_key = 'nav.people' %}
+    {% include 'components/page-header.html' %}
+
+    <main class="flex-1 min-h-0 overflow-y-auto">
+        <div class="max-w-6xl mx-auto px-4 py-6 space-y-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="text-2xl font-bold" data-i18n="people.title">人物</h2>
+                    <p class="text-sm text-[var(--text-secondary)] mt-1 max-w-3xl" data-i18n="people.subtitle"></p>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <button id="howBtn" class="btn btn--ghost btn--sm" type="button">
+                        <i class="fas fa-circle-question mr-1"></i><span data-i18n="people.howItWorks">運作方式</span>
+                    </button>
+                    <button id="backfillBtn" class="btn btn--ghost btn--sm" type="button" data-i18n-title="people.backfillHint">
+                        <i class="fas fa-wand-magic-sparkles mr-1"></i><span data-i18n="people.backfill">從既有錄音建立片段</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="howBox" class="hidden text-sm leading-relaxed text-[var(--text-secondary)] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg p-4" data-i18n="people.howItWorksText"></div>
+
+            <div class="flex flex-wrap items-center gap-3">
+                <input id="searchBox" type="search" class="field field--sm w-64 max-w-full" data-i18n-placeholder="people.search" placeholder="搜尋名字">
+                <span id="countLabel" class="text-sm text-[var(--text-muted)]"></span>
+                <span class="text-xs text-[var(--text-muted)]" data-i18n="people.mergeHint"></span>
+            </div>
+
+            <div id="peopleGrid" class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                <div class="text-[var(--text-muted)]" data-i18n="people.loading">載入中…</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+    (function () {
+        'use strict';
+        const t = (k, p) => (window.i18n && window.i18n.t) ? window.i18n.t(k, p || {}) : k;
+        const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const headers = (json) => Object.assign({ 'X-CSRFToken': csrf() }, json ? { 'Content-Type': 'application/json' } : {});
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const grid = document.getElementById('peopleGrid');
+        const state = { people: [], clips: {}, selected: new Set(), filter: '', audio: null, audioClipId: null };
+
+        function toast(msg, isError) {
+            const el = document.createElement('div'); el.className = 'toast' + (isError ? ' is-error' : ''); el.textContent = msg;
+            document.body.appendChild(el); setTimeout(() => el.remove(), isError ? 6000 : 3000);
+        }
+        async function api(url, opts) {
+            const r = await fetch(url, opts || {});
+            let d = null; try { d = await r.json(); } catch (_) {}
+            if (!r.ok) throw new Error((d && (d.error || d.message)) || `HTTP ${r.status}`);
+            return d;
+        }
+        function fmtDate(iso) { if (!iso) return '-'; const d = new Date(iso); return isNaN(d) ? '-' : d.toLocaleDateString(); }
+
+        async function load() {
+            state.people = await api('/speakers');
+            render();
+        }
+        function visiblePeople() {
+            const f = state.filter.trim().toLowerCase();
+            return state.people.filter(p => !f || (p.name || '').toLowerCase().includes(f));
+        }
+        function render() {
+            const people = visiblePeople();
+            document.getElementById('countLabel').textContent = t('people.count', { n: state.people.length });
+            if (!state.people.length) { grid.innerHTML = `<div class="text-[var(--text-muted)]">${esc(t('people.empty'))}</div>`; return; }
+            grid.innerHTML = people.map(cardHtml).join('');
+            people.forEach(p => { if (state.clips[p.id]) renderClips(p.id); });
+        }
+        function cardHtml(p) {
+            const rc = p.reference_clips || { count: 0, seconds: 0, hits: 0 };
+            const sel = state.selected.has(p.id);
+            const others = state.selected.size - (sel ? 1 : 0);
+            return `
+            <div class="person-card p-4 flex flex-col gap-3 ${sel ? 'is-selected' : ''}" data-id="${p.id}">
+                <div class="flex items-start gap-3">
+                    <label class="flex items-center pt-1 cursor-pointer" title="${esc(t('people.selectForMerge'))}">
+                        <input type="checkbox" class="sel-box" data-id="${p.id}" ${sel ? 'checked' : ''}>
+                    </label>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="font-semibold text-lg truncate name-label">${esc(p.name)}</span>
+                            <button class="btn btn--icon btn--sm rename-btn" data-id="${p.id}" title="${esc(t('people.rename'))}"><i class="fas fa-pen"></i></button>
+                        </div>
+                        <div class="text-xs text-[var(--text-muted)] mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span>${esc(t('people.recordings', { n: p.use_count ?? 0 }))}</span>
+                            <span>${esc(t('people.lastUsed'))} ${esc(fmtDate(p.last_used))}</span>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                            ${rc.count ? `<span class="chip">${esc(t('people.clips', { n: rc.count }))} · ${esc(t('people.seconds', { s: rc.seconds }))}</span>
+                                          <span class="chip">${esc(t('people.hits', { n: rc.hits }))}</span>`
+                                       : `<span class="chip chip-meta--warn">${esc(t('people.noClips'))}</span>`}
+                        </div>
+                    </div>
+                    <button class="btn btn--icon btn--sm delete-btn text-[var(--text-danger)]" data-id="${p.id}" title="${esc(t('people.delete'))}"><i class="fas fa-trash"></i></button>
+                </div>
+                ${others > 0 && !sel ? `<button class="btn btn--primary btn--sm merge-btn" data-id="${p.id}"><i class="fas fa-code-merge mr-1"></i>${esc(t('people.mergeInto'))} (${others})</button>` : ''}
+                <div>
+                    <button class="btn btn--quiet btn--sm clips-toggle" data-id="${p.id}">
+                        <i class="fas fa-waveform-lines mr-1"></i>${esc(t('people.clipsTitle'))}
+                        <i class="fas fa-chevron-down ml-1 text-xs"></i>
+                    </button>
+                    <div class="clips-box mt-2 space-y-2 ${state.clips[p.id] ? '' : 'hidden'}" data-id="${p.id}"></div>
+                </div>
+            </div>`;
+        }
+        async function loadClips(id) {
+            const d = await api(`/speakers/${id}/reference_clips`);
+            state.clips[id] = d.clips || [];
+            renderClips(id);
+        }
+        function renderClips(id) {
+            const box = grid.querySelector(`.clips-box[data-id="${id}"]`); if (!box) return;
+            const clips = state.clips[id] || [];
+            box.classList.remove('hidden');
+            if (!clips.length) { box.innerHTML = `<div class="text-xs text-[var(--text-muted)]">${esc(t('people.noClips'))}</div>`; return; }
+            box.innerHTML = clips.map(c => `
+                <div class="clip-row p-2 text-xs" data-clip="${c.id}">
+                    <div class="flex items-center gap-2">
+                        <button class="btn btn--icon btn--sm play-btn" data-clip="${c.id}" title="${esc(t('people.play'))}"><i class="fas fa-play"></i></button>
+                        <div class="min-w-0 flex-1">
+                            <div class="truncate">
+                                ${c.recording_id ? `<a class="hover:underline" href="/?recording=${c.recording_id}" title="${esc(t('people.openRecording'))}">${esc(t('people.clipFrom', { title: c.recording_title || c.recording_id }))}</a>`
+                                                 : esc(t('people.clipFromDeleted'))}
+                            </div>
+                            <div class="text-[var(--text-muted)]">
+                                ${esc(t('people.seconds', { s: c.duration }))} · ${esc(t('people.clipSource_' + c.source) === 'people.clipSource_' + c.source ? c.source : t('people.clipSource_' + c.source))}
+                                ${c.label ? ' · ' + esc(t('people.clipLabel', { label: c.label })) : ''} · ${esc(t('people.hits', { n: c.hit_count }))} · ${esc(fmtDate(c.created_at))}
+                            </div>
+                            <div class="clip-progress mt-1"><div></div></div>
+                        </div>
+                        <button class="btn btn--icon btn--sm clip-delete text-[var(--text-danger)]" data-clip="${c.id}" data-speaker="${id}" title="${esc(t('people.clipDelete'))}"><i class="fas fa-xmark"></i></button>
+                    </div>
+                </div>`).join('');
+        }
+        function stopAudio() {
+            if (state.audio) { state.audio.pause(); state.audio = null; }
+            grid.querySelectorAll('.play-btn i').forEach(i => { i.className = 'fas fa-play'; });
+            grid.querySelectorAll('.clip-progress > div').forEach(b => { b.style.width = '0'; });
+            state.audioClipId = null;
+        }
+        function playClip(clipId) {
+            if (state.audioClipId === clipId) { stopAudio(); return; }
+            stopAudio();
+            const row = grid.querySelector(`.clip-row[data-clip="${clipId}"]`);
+            const bar = row?.querySelector('.clip-progress > div'); const icon = row?.querySelector('.play-btn i');
+            const a = new Audio(`/speakers/reference_clips/${clipId}/audio`);
+            state.audio = a; state.audioClipId = clipId;
+            if (icon) icon.className = 'fas fa-pause';
+            a.addEventListener('timeupdate', () => { if (bar && a.duration) bar.style.width = (a.currentTime / a.duration * 100) + '%'; });
+            a.addEventListener('ended', stopAudio);
+            a.addEventListener('error', () => { toast(t('people.error', { error: 'audio' }), true); stopAudio(); });
+            a.play().catch(() => {});
+        }
+
+        grid.addEventListener('click', async (e) => {
+            const btn = e.target.closest('button, input'); if (!btn) return;
+            const id = Number(btn.dataset.id); const p = state.people.find(x => x.id === id);
+            try {
+                if (btn.classList.contains('sel-box')) { btn.checked ? state.selected.add(id) : state.selected.delete(id); render(); return; }
+                if (btn.classList.contains('clips-toggle')) {
+                    const box = grid.querySelector(`.clips-box[data-id="${id}"]`);
+                    if (!box.classList.contains('hidden') && state.clips[id]) { box.classList.add('hidden'); delete state.clips[id]; return; }
+                    await loadClips(id); return;
+                }
+                if (btn.classList.contains('rename-btn')) {
+                    const name = prompt(t('people.renamePrompt'), p.name); if (!name || name.trim() === p.name) return;
+                    await api(`/speakers/${id}`, { method: 'PUT', headers: headers(true), body: JSON.stringify({ name: name.trim() }) });
+                    toast(t('people.renamed', { name: name.trim() })); await load(); return;
+                }
+                if (btn.classList.contains('delete-btn')) {
+                    if (!confirm(t('people.deleteConfirm', { name: p.name }))) return;
+                    await api(`/speakers/${id}`, { method: 'DELETE', headers: headers(false) });
+                    state.selected.delete(id); toast(t('people.deleted')); await load(); return;
+                }
+                if (btn.classList.contains('merge-btn')) {
+                    const sources = [...state.selected].filter(s => s !== id);
+                    const names = sources.map(s => state.people.find(x => x.id === s)?.name).filter(Boolean).join('、');
+                    if (!sources.length || !confirm(t('people.mergeConfirm', { sources: names, target: p.name }))) return;
+                    const d = await api('/speakers/merge', { method: 'POST', headers: headers(true), body: JSON.stringify({ target_id: id, source_ids: sources }) });
+                    state.selected.clear(); toast(t('people.merged', { n: d.recordings_updated ?? 0 })); await load(); return;
+                }
+                if (btn.classList.contains('play-btn')) { playClip(Number(btn.dataset.clip)); return; }
+                if (btn.classList.contains('clip-delete')) {
+                    if (!confirm(t('people.clipDeleteConfirm'))) return;
+                    await api(`/speakers/reference_clips/${btn.dataset.clip}`, { method: 'DELETE', headers: headers(false) });
+                    toast(t('people.clipDeleted')); await load(); await loadClips(Number(btn.dataset.speaker)); return;
+                }
+            } catch (err) { toast(t('people.error', { error: err.message }), true); }
+        });
+        document.getElementById('searchBox').addEventListener('input', (e) => { state.filter = e.target.value; render(); });
+        document.getElementById('howBtn').addEventListener('click', () => document.getElementById('howBox').classList.toggle('hidden'));
+        document.getElementById('backfillBtn').addEventListener('click', async (e) => {
+            e.currentTarget.disabled = true;
+            try { const d = await api('/speakers/reference_clips/backfill', { method: 'POST', headers: headers(false) });
+                  toast(t('people.backfillDone', { created: d.clips_created, skipped: d.skipped_existing })); await load(); }
+            catch (err) { toast(t('people.error', { error: err.message }), true); }
+            finally { e.currentTarget && (e.currentTarget.disabled = false); document.getElementById('backfillBtn').disabled = false; }
+        });
+
+        async function init() {
+            try {
+                if (window.i18n) await window.i18n.init("{{ user_language }}");
+                document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+                document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-placeholder')); });
+                document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.getAttribute('data-i18n-title')); });
+                await load();
+            } catch (err) { toast(t('people.error', { error: err.message }), true); }
+            finally { if (window.AppLoader) window.AppLoader.hide(); }
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+    })();
+    </script>
+</body>
+</html>

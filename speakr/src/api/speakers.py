@@ -248,6 +248,14 @@ def delete_all_speakers():
 
 # --- locol_vocol: reference clips (voiceprints as audio) ---
 
+@speakers_bp.route('/people', methods=['GET'])
+@login_required
+def people_page():
+    """The people recognised by voice: their clips, renaming and merging."""
+    return render_template('people.html', title='People',
+                           user_language=current_user.ui_language or 'zh')
+
+
 @speakers_bp.route('/speakers/<int:speaker_id>/reference_clips', methods=['GET'])
 @login_required
 def list_reference_clips(speaker_id):
