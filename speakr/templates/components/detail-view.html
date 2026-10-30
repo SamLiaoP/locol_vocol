@@ -1,5 +1,6 @@
 <!-- Detail View Container -->
-<div v-if="currentView === 'detail' && selectedRecording" class="flex-1 flex flex-col overflow-hidden">
+<div v-if="currentView === 'detail' && selectedRecording" class="lv-detail flex-1 flex flex-col overflow-hidden">
+    {% include 'components/detail/recording-heading.html' %}
     <!-- Incognito Mode Indicator Bar (theme-safe tint via --tint-incognito) -->
     <div v-if="selectedRecording.incognito"
          class="border-b px-4 py-2 flex-shrink-0"

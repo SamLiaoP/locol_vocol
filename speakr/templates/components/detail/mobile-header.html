@@ -13,6 +13,15 @@
 <div class="border-b flex-shrink-0"
      style="background: var(--bg-secondary); border-bottom-color: var(--border-primary);">
 
+    <div class="lv-mobile-title">
+        <p class="lv-eyebrow">TRANSCRIPT / 對話紀錄</p>
+        <div class="flex items-start gap-2">
+            <h1 v-if="!editingTitle" class="flex-1" @dblclick="selectedRecording.can_edit !== false ? toggleEditTitle() : null">${selectedRecording.title || '未命名錄音'}</h1>
+            <input v-else v-model="selectedRecording.title" @blur="saveTitle" @keyup.enter="saveTitle" @keyup.esc="cancelEditTitle" ref="titleInput" class="field flex-1 min-w-0" aria-label="錄音標題">
+            <button v-if="!editingTitle && selectedRecording.can_edit !== false" @click="toggleEditTitle" class="btn btn--icon btn--sm" :title="t('tooltips.editTitle')" :aria-label="t('tooltips.editTitle')"><i class="fas fa-pen" aria-hidden="true"></i></button>
+        </div>
+    </div>
+
     <!-- Always-visible meta strip -->
     <div @click="isMetadataExpanded = !isMetadataExpanded"
          class="cursor-pointer px-4 py-2 flex items-center gap-3">

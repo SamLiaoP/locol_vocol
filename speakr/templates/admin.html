@@ -1,24 +1,25 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="zh-Hant" class="h-full">
 <head>
+    {% include 'includes/theme_bootstrap.html' %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <title>{% if is_group_admin_only %}Group Management{% else %}Admin Dashboard{% endif %} - Speakr</title>
+    <title>{% if is_group_admin_only %}Group Management{% else %}Admin Dashboard{% endif %} - Locol-Vocol</title>
 
     <!-- Loading overlay to prevent FOUC - MUST be first -->
     {% include 'includes/loading_overlay.html' %}
 
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ url_for('static', filename='img/locol-favicon.svg') }}" type="image/svg+xml">
         <!-- All dependencies bundled locally for offline support -->
         <!-- All dependencies bundled locally for offline support -->
 <script src="{{ url_for('static', filename='vendor/js/vue.global.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/js/chart.umd.min.js') }}"></script>
         <!-- All dependencies bundled locally for offline support -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css', v='orange-20261030-1') }}">
     {% include 'includes/i18n_bootstrap.html' %}
     <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
     <style>
@@ -124,7 +125,7 @@
                     if (!r.ok) return;
                     const data = await r.json();
                     if (!data.version) return;
-                    const value = `Speakr ${data.version} © {{ now.year }}`;
+                    const value = `Locol-Vocol © {{ now.year }}`;
                     const ft = document.getElementById('footer-text');
                     if (ft) ft.textContent = value;
                     document.documentElement.style.setProperty(
@@ -138,7 +139,8 @@
     <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-full flex flex-col overflow-hidden">
     {% set page_label = ('Team Management' if is_team_admin and not current_user.is_admin else 'Admin') %}
@@ -150,7 +152,7 @@
          couldn't shrink #app below its content height and the sticky
          .tab-footer ended up below the viewport. -->
     <div id="app" v-cloak class="flex-1 flex flex-col overflow-hidden" style="min-height: 0;">
-        <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <main class="lv-admin flex-1 flex flex-col min-h-0 overflow-hidden">
             <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
 
                 {% with messages = get_flashed_messages(with_categories=true) %}

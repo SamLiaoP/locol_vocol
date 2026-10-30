@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
+    {% include 'includes/theme_bootstrap.html' %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <title>{{ title }} - Speakr</title>
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/svg+xml">
+    <title>{{ title }} - Locol-Vocol</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/locol-favicon.svg') }}" type="image/svg+xml">
         <!-- All dependencies bundled locally for offline support -->
         <!-- All dependencies bundled locally for offline support -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
 
     <!-- Loading overlay to prevent FOUC -->
     {% include 'includes/loading_overlay.html' %}
@@ -51,23 +52,26 @@
     <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)]">
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col min-h-screen">
-        <header class="flex justify-between items-center mb-6 pb-4 border-b border-[var(--border-primary)]">
-            <h1 class="text-3xl font-bold text-[var(--text-primary)]">
-                <a href="{{ url_for('recordings.index') }}" class="flex items-center">
-                    <img src="{{ url_for('static', filename='img/favicon.ico') }}" alt="Speakr Logo" class="app-logo h-9 w-9 mr-2">
-                    Speakr
-                </a>
-            </h1>
+    <div class="lv-login">
+        <header class="lv-login-header">
+            {% include 'components/wordmark.html' %}
+            <div class="lv-login-controls"><span class="lv-local-label">你的對話工作台</span>{% with static_theme_toggle=true %}{% include 'components/appearance-toggle.html' %}{% endwith %}</div>
         </header>
-
-        <main class="flex-grow flex items-center justify-center">
-            <div class="w-full max-w-md bg-[var(--bg-secondary)] p-8 rounded-2xl shadow-sm border border-[var(--border-primary)]">
-                <h2 class="text-2xl font-semibold text-[var(--text-primary)] mb-6 text-center">Login</h2>
-                
+        <main class="lv-login-main">
+            <section class="lv-login-story">
+                <p class="lv-eyebrow">YOUR VOICES. A PLACE TO STAY.</p>
+                <h2>好好說，<br><span class="lv-highlight">慢慢整理。</span></h2>
+                <p class="lv-intro">把會議、訪談與靈感，變成讀得懂的文字。<br>記住每個聲音，也留下重要的細節。</p>
+                <div class="lv-process"><span><b>01</b> 記錄對話</span><i aria-hidden="true">→</i><span><b>02</b> 整理文字</span><i aria-hidden="true">→</i><span><b>03</b> 留住想法</span></div>
+            </section>
+            <section class="lv-login-form" aria-labelledby="login-title">
+                <p class="lv-eyebrow">WELCOME BACK / 歡迎回來</p>
+                <h2 id="login-title">登入你的工作台</h2>
+                <p class="lv-login-description">接著上次的對話，繼續整理。</p>
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
@@ -81,12 +85,12 @@
                 {% if sso_enabled %}
                 <div class="flex flex-col space-y-3 {% if not password_login_disabled %}mb-6{% endif %}">
                     <a href="{{ url_for('auth.sso_login') }}" class="w-full inline-flex items-center justify-center px-4 py-2 bg-[var(--bg-button)] text-[var(--text-button)] rounded-md hover:bg-[var(--bg-button-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--border-focus)] transition-colors duration-200">
-                        <i class="fas fa-cloud mr-2"></i> Sign in with {{ sso_provider_name }}
+                        <i class="fas fa-cloud mr-2"></i> 使用 {{ sso_provider_name }} 登入
                     </a>
                     {% if not password_login_disabled %}
                     <div class="flex items-center text-xs text-[var(--text-muted)]">
                         <span class="flex-grow border-t border-[var(--border-secondary)]"></span>
-                        <span class="mx-3 uppercase tracking-wide">or</span>
+                        <span class="mx-3 uppercase tracking-wide">或</span>
                         <span class="flex-grow border-t border-[var(--border-secondary)]"></span>
                     </div>
                     {% endif %}
@@ -96,7 +100,7 @@
                 {% if password_login_disabled %}
                 <div class="mt-4 text-center">
                     <button type="button" onclick="document.getElementById('admin-login-form').classList.toggle('hidden')" class="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
-                        <i class="fas fa-lock mr-1"></i> Administrator login
+                        <i class="fas fa-lock mr-1"></i> 管理員登入
                     </button>
                 </div>
                 <form id="admin-login-form" method="POST" action="{{ url_for('auth.login') }}" class="hidden mt-4">
@@ -116,7 +120,7 @@
                     {{ form.hidden_tag() }}
 
                     <div class="mb-4">
-                        {{ form.email.label(class="block text-sm font-medium text-[var(--text-secondary)] mb-1") }}
+                        {{ form.email.label(text="電子郵件", class="block text-sm font-medium text-[var(--text-secondary)] mb-1") }}
                         {% if form.email.errors %}
                             {{ form.email(class="mt-1 block w-full rounded-md border-[var(--border-danger)] shadow-sm focus:border-[var(--border-focus)] focus:ring-[var(--ring-focus)] focus:ring-opacity-50 bg-[var(--bg-input)] text-[var(--text-primary)]") }}
                             <div class="text-[var(--text-danger)] text-xs mt-1">
@@ -130,7 +134,7 @@
                     </div>
 
                     <div class="mb-4">
-                        {{ form.password.label(class="block text-sm font-medium text-[var(--text-secondary)] mb-1") }}
+                        {{ form.password.label(text="密碼", class="block text-sm font-medium text-[var(--text-secondary)] mb-1") }}
                         {% if form.password.errors %}
                             {{ form.password(class="mt-1 block w-full rounded-md border-[var(--border-danger)] shadow-sm focus:border-[var(--border-focus)] focus:ring-[var(--ring-focus)] focus:ring-opacity-50 bg-[var(--bg-input)] text-[var(--text-primary)]") }}
                             <div class="text-[var(--text-danger)] text-xs mt-1">
@@ -146,7 +150,7 @@
                     <div class="flex items-center justify-between mb-6">
                         <div class="flex items-center">
                             {{ form.remember(class="h-4 w-4 text-[var(--text-accent)] focus:ring-[var(--ring-focus)] border-[var(--border-secondary)] rounded") }}
-                            {{ form.remember.label(class="ml-2 block text-sm text-[var(--text-secondary)]") }}
+                            {{ form.remember.label(text="保持登入", class="ml-2 block text-sm text-[var(--text-secondary)]") }}
                         </div>
 {% if false %}
                         <a href="{{ url_for('auth.forgot_password') }}" class="text-sm text-[var(--text-accent)] hover:underline">Forgot password?</a>
@@ -154,23 +158,15 @@
                     </div>
 
                     <div class="flex flex-col space-y-4">
-                        {{ form.submit(class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-[var(--text-button)] bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--border-focus)]") }}
+                        {{ form.submit(value="登入工作台 →", class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-[var(--text-button)] bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--border-focus)]") }}
 
-                        <div class="text-center text-sm text-[var(--text-muted)]">
-                            <span>Don't have an account?</span>
-{% if false %}
-                            <a href="{{ url_for('auth.register') }}" class="font-medium text-[var(--text-accent)] hover:underline">Register here</a>
-{% endif %}
-                        </div>
+
                     </div>
                 </form>
                 {% endif %}
-            </div>
+            </section>
         </main>
-
-        <footer class="text-center py-4 mt-8 text-xs text-[var(--text-light)] border-t border-[var(--border-primary)]">
-            Speakr &copy; {{ now.year }}
-        </footer>
+        <footer class="lv-footer" style="width:100%"><span>LOCOL / VOCOL — 留住對話裡的每個細節。</span><a href="/references">參考與致謝 ↗</a></footer>
     </div>
 
     <script>

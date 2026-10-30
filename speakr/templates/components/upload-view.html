@@ -9,7 +9,7 @@
      @keydown.esc="closeUploadView"
      tabindex="-1"
      class="modal-overlay">
-    <div class="modal-panel modal-panel--lg modal-panel--bottom-sheet"
+    <div class="lv-upload modal-panel modal-panel--lg modal-panel--bottom-sheet"
          :style="[{ maxHeight: '92vh' }, bottomSheetDragStyle]">
         <!-- Drag-to-dismiss handlers attached on the header area only
              (and on the panel's ::before drag handle, which lives inside
@@ -29,7 +29,7 @@
         </div>
         <div class="modal-body">
             <!-- File Upload Area -->
-            <div @drop="handleDrop" @dragover="handleDragOver" @dragleave="handleDragLeave" @click="$refs.fileInput.click()"
+            <div role="button" tabindex="0" :aria-label="t('upload.dropzone')" @keydown.enter.prevent="$refs.fileInput.click()" @keydown.space.prevent="$refs.fileInput.click()" @drop="handleDrop" @dragover="handleDragOver" @dragleave="handleDragLeave" @click="$refs.fileInput.click()"
                  :class="['border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-300', dragover ? 'border-[var(--border-accent)] bg-[var(--bg-accent)]' : 'border-[var(--border-secondary)] hover:border-[var(--border-accent)]']">
                 <i class="fas fa-cloud-upload-alt text-2xl text-[var(--text-muted)] mb-2"></i>
                 <p class="text-sm text-[var(--text-secondary)] mb-1" v-text="t('upload.dropzone')"></p>

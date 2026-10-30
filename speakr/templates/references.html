@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>參考與致謝 · Locol-Vocol</title>
+    {% include 'includes/theme_bootstrap.html' %}
+    <link rel="icon" href="{{ url_for('static', filename='img/locol-favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
+</head>
+<body class="lv-credits bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <header class="lv-header flex items-center justify-between border-b border-[var(--border-primary)]">
+        {% include 'components/wordmark.html' %}
+        <div class="lv-login-controls">{% include 'components/workspace-nav.html' %}{% with static_theme_toggle=true %}{% include 'components/appearance-toggle.html' %}{% endwith %}</div>
+    </header>
+    <main class="lv-credits-main">
+        <p class="lv-eyebrow">BUILT ON GOOD THINGS / 參考與致謝</p>
+        <h1 class="lv-page-title">每個作品，都有來處。</h1>
+        <p class="lv-credits-intro">Locol-Vocol 是為繁體中文會議與訪談打造的對話工作台。從開源專案出發，逐步長出自己的操作方式與視覺風格，也在這裡記錄它的起點。</p>
+        <section class="lv-credit-card" aria-labelledby="speakr-credit">
+            <p class="lv-eyebrow">01 / OPEN SOURCE FOUNDATION</p>
+            <div class="lv-credit-heading"><img src="{{ url_for('static', filename='img/icon-128.png') }}" alt="Speakr 開源專案 Logo"><h3 id="speakr-credit">Speakr</h3></div>
+            <p>本專案以 Speakr v0.10.13-alpha（commit ba7e85c）為基礎，延伸轉錄、說話者管理與錄音處理功能。感謝原作者及開源社群的貢獻。</p>
+            <p style="margin-top:12px">Locol-Vocol 保留 AGPL-3.0 授權；Speakr 的名稱與 Logo 在此用於來源標示。</p>
+            <div class="lv-credit-links"><a href="https://github.com/murtaza-nasir/speakr" target="_blank" rel="noopener noreferrer">Speakr 原始專案 ↗</a><a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">AGPL-3.0 授權 ↗</a></div>
+        </section>
+        <section class="lv-credit-card" aria-labelledby="design-credit">
+            <p class="lv-eyebrow">02 / VISUAL INSPIRATION</p>
+            <h3 id="design-credit">PlaylistBridge / Songferry</h3>
+            <p>視覺靈感來自 PlaylistBridge：紙張感的留白與安靜、清楚的工作區排版。Locol-Vocol 在此基礎上延伸為暖橘色風格，搭配可切換的奶油白與暖棕深色介面，適合長時間閱讀與整理對話。</p>
+        </section>
+        <footer class="lv-footer"><span>LOCOL / VOCOL — YOUR VOICES. A PLACE TO STAY.</span><a href="/">回到工作台 ↗</a></footer>
+    </main>
+</body>
+</html>

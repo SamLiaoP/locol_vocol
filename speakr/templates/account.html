@@ -1,17 +1,18 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="zh-Hant" class="h-full">
 <head>
+    {% include 'includes/theme_bootstrap.html' %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <title>{{ title }} - Speakr</title>
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/svg+xml">
+    <title>設定 · Locol-Vocol</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/locol-favicon.svg') }}" type="image/svg+xml">
         <!-- All dependencies bundled locally for offline support -->
         <!-- All dependencies bundled locally for offline support -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css', v='orange-20261030-1') }}">
     {% include 'includes/i18n_bootstrap.html' %}
     <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
     <script src="{{ url_for('static', filename='js/asr-languages.js') }}"></script>
@@ -464,14 +465,15 @@
     <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
     <script src="{{ url_for('static', filename='js/timezone-sync.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-full flex flex-col overflow-hidden">
     {% set page_label = 'Account' %}
     {% set page_label_key = 'nav.account' %}
     {% include 'components/page-header.html' %}
-    <div class="main-container flex-1 flex flex-col min-h-0 overflow-hidden">
+    <div class="lv-settings main-container flex-1 flex flex-col min-h-0 overflow-hidden">
 
         <main class="flex-1 flex flex-col min-h-0 overflow-hidden">
             <!-- Page content area — full width, no floating-card chrome,
@@ -488,19 +490,19 @@
                         <i class="fas fa-chevron-left"></i>
                     </button>
                 <nav class="tabs px-3 sm:px-4" aria-label="Tabs" id="tabs-container">
-                    <a href="#" id="tab-account" class="tab is-active" style="display:none"">
+                    <a href="#" id="tab-account" class="tab is-active" style="display:none">
                         <i class="fas fa-user-circle"></i><span data-i18n="account.title">Account</span>
                     </a>
                     <a href="#" id="tab-preferences" class="tab is-active">
                         <i class="fas fa-sliders-h"></i><span data-i18n="accountTabs.preferences">Preferences</span>
                     </a>
-                    <a href="#" id="tab-prompts" class="tab" style="display:none"">
+                    <a href="#" id="tab-prompts" class="tab" style="display:none">
                         <i class="fas fa-cog"></i><span data-i18n="accountTabs.promptOptions">Prompts</span>
                     </a>
-                    <a href="#" id="tab-shares" class="tab" style="display:none"">
+                    <a href="#" id="tab-shares" class="tab" style="display:none">
                         <i class="fas fa-share-alt"></i><span data-i18n="accountTabs.sharedTranscripts">Shares</span>
                     </a>
-                    <a href="#" id="tab-speakers" class="tab" style="display:none"">
+                    <a href="#" id="tab-speakers" class="tab" style="display:none">
                         <i class="fas fa-users"></i><span data-i18n="accountTabs.speakersManagement">Speakers</span>
                     </a>
                     <!-- Tags and Folders share one tab with subtabs inside:
@@ -508,16 +510,16 @@
                          single "organize" destination keeps the strip short.
                          The Folders SUBTAB stays hidden unless the folders
                          feature is enabled (mirrors the old hidden tab). -->
-                    <a href="#" id="tab-organize" class="tab" style="display:none"">
+                    <a href="#" id="tab-organize" class="tab" style="display:none">
                         <i class="fas fa-tags"></i><span data-i18n="accountTabs.tagsAndFolders">Tags &amp; Folders</span>
                     </a>
-                    <a href="#" id="tab-templates" class="tab" style="display:none"">
+                    <a href="#" id="tab-templates" class="tab" style="display:none">
                         <i class="fas fa-file-alt"></i><span data-i18n="accountTabs.templates">Templates</span>
                     </a>
                     <a href="#" id="tab-tokens" class="tab" style="display:none">{# locol_vocol: API tokens removed #}
                         <i class="fas fa-key"></i><span data-i18n="accountTabs.apiTokens">API Tokens</span>
                     </a>
-                    <a href="#" id="tab-webhooks" class="tab" style="display:none"">
+                    <a href="#" id="tab-webhooks" class="tab" style="display:none">
                         <i class="fas fa-link"></i><span data-i18n="accountTabs.webhooks">Webhooks</span>
                     </a>
                     <a href="#" id="tab-about" class="tab">
@@ -1038,7 +1040,7 @@
 
                     <div id="content-preferences" class="tab-content">
                       <div class="tab-scroll">
-                        <h2 class="text-2xl font-semibold text-[var(--text-primary)] mb-2" data-i18n="accountTabs.preferences">Preferences</h2>
+                        <p class="lv-eyebrow">MAKE IT YOURS / 偏好設定</p><h2 class="lv-page-title">讓工具，照你的習慣。</h2>
                         <p class="text-sm text-[var(--text-muted)] mb-6" data-i18n="preferences.description">Display and editor behaviour preferences. These settings are saved to your account and apply across devices.</p>
 
                         <form id="preferencesForm" method="POST" action="{{ url_for('auth.account') }}" class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
@@ -1090,7 +1092,7 @@
                                         </select>
                                         <p class="text-xs text-[var(--text-light)] mt-1" data-i18n="account.leaveBlankForAutoDetect">Select auto-detect to let the transcription service determine the language.</p>
                                     </div>
-                                    <div>
+                                    <div hidden>
                                         <label for="output_language" class="block text-sm font-medium text-[var(--text-muted)]" data-i18n="account.preferredOutputLanguage">Preferred Output Language</label>
                                         <select name="output_language" id="output_language" class="mt-1 block w-full px-3 py-2 border border-[var(--border-secondary)] rounded-md shadow-sm focus:outline-none focus:ring-[var(--border-focus)] focus:border-[var(--border-focus)] sm:text-sm bg-[var(--bg-input)] text-[var(--text-primary)]">
                                             <option value="" data-sort-pin="top" data-i18n="languages.defaultModelDecides" {% if not current_user.output_language %}selected{% endif %}>Default (model decides)</option>
@@ -2156,9 +2158,9 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
                         <div class="max-w-4xl mx-auto space-y-6">
                             <!-- Identity strip -->
                             <div class="flex items-center gap-4">
-                                <img src="{{ url_for('static', filename='img/icon-192x192.png') }}" alt="Speakr Logo" class="app-logo h-12 w-12 flex-shrink-0">
+
                                 <div class="flex-1">
-                                    <h2 class="text-2xl font-semibold text-[var(--text-primary)]">Speakr</h2>
+                                    <h2 class="text-2xl font-semibold text-[var(--text-primary)]">Locol-Vocol</h2>
                                     <p class="text-sm text-[var(--text-muted)]" data-i18n="aboutPage.tagline">AI-Powered Audio Transcription &amp; Note-Taking</p>
                                 </div>
                                 <span class="inline-flex items-center px-2.5 py-1 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded-md text-xs font-mono border border-[var(--border-primary)]">
@@ -4418,7 +4420,7 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
                         const data = await response.json();
                         const footerText = document.getElementById('footer-text');
                         if (footerText && data.version) {
-                            const value = `Speakr ${data.version} © {{ now.year }}`;
+                            const value = `Locol-Vocol © {{ now.year }}`;
                             footerText.textContent = value;
                             document.documentElement.style.setProperty(
                                 '--footer-version-text',

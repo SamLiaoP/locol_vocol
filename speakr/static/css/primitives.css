@@ -1667,7 +1667,7 @@ textarea:focus-visible {
     border-top: 1px solid var(--border-primary);
 }
 .tab-footer::before {
-    content: var(--footer-version-text, "Speakr");
+    content: var(--footer-version-text, "Locol-Vocol");
     margin-right: auto;
     color: var(--text-light);
     font-size: var(--fs-meta);

@@ -26,7 +26,7 @@ from src.models import User
 app.config["WTF_CSRF_ENABLED"] = False
 
 # Markers only the shared template has.
-SHARED_MARKERS = ('data-notifications-toggle', 'openSharesList', 'openColorSchemeModal', 'switchToUploadView')
+SHARED_MARKERS = ('data-notifications-toggle', '/people', '/account', '/references', 'toggleDarkMode', 'switchToUploadView', 'data-theme-toggle')
 
 
 class _Client(FlaskClient):
@@ -90,3 +90,34 @@ def test_the_loading_overlay_follows_the_theme_and_waits_before_showing(admin_cl
     html = admin_client.get("/account").get_data(as_text=True)
     assert "background: var(--bg-primary" in html
     assert "app-loading-appear" in html
+
+
+def test_references_are_public_and_keep_upstream_attribution():
+    client = app.test_client()
+    response = client.get('/references')
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'Speakr 開源專案 Logo' in html
+    assert 'https://github.com/murtaza-nasir/speakr' in html
+    assert 'AGPL-3.0' in html
+
+
+@pytest.mark.parametrize("path", ["/", "/people", "/account", "/admin"])
+def test_product_pages_use_the_product_brand_and_keep_upstream_logo_in_credits(admin_client, path):
+    response = admin_client.get(path)
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'Locol-Vocol' in html
+    assert 'alt="Speakr' not in html
+    assert "/static/img/icon-" not in html
+    assert 'aria-label="主要導覽"' in html
+
+
+@pytest.mark.parametrize("path", ["/login", "/references"])
+def test_standalone_pages_offer_an_accessible_appearance_switch(path):
+    response = app.test_client().get(path)
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'data-static-theme-toggle' in html
+    assert 'aria-label="切換明亮或深色模式"' in html
+    assert '/static/js/appearance-toggle.js' in html

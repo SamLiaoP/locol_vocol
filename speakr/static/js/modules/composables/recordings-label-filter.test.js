@@ -173,6 +173,21 @@ describe('loadRecordings auto-selection after a label deep link', () => {
         expect(getItem).toHaveBeenCalledWith('lastSelectedRecordingId');
     });
 
+    it('keeps the overview open when the user explicitly returns home', async () => {
+        const { state, composable } = setup();
+        getItem.mockReturnValue('7');
+        const fetch = stubFetchReturning([{ id: 7, title: 'previous recording' }]);
+        vi.stubGlobal('window', { location: { search: '?home=1' } });
+        try {
+            await composable.loadRecordings();
+            expect(state.selectedRecording.value).toBeNull();
+            expect(state.recordings.value).toHaveLength(1);
+            expect(fetch).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('still auto-selects on an ordinary load', async () => {
         const { composable } = setup();
         stubFetchReturning([{ id: 7, title: 'tagged' }]);

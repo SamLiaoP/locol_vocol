@@ -844,11 +844,11 @@
     "watchFolderVariableWarning": "This tag is set up as a watch folder and the prompt contains placeholder variables. Recordings ingested through the auto-process directory have no UI for users to fill those values, so the placeholders will substitute to empty strings on the first summary run. Either remove the placeholders or fill the values via reprocess after upload."
   },
   "emptyState": {
-    "readyToCapture": "Ready to capture",
-    "readyBody": "Drop an audio file, record from your microphone, or capture system audio. Speakr turns it into a searchable transcript with summary and chat.",
+    "readyToCapture": "Keep the conversation.",
+    "readyBody": "Upload or record a conversation. Turn voices into readable transcripts, with a name for every speaker.",
     "newRecording": "New recording",
-    "selectRecording": "Select a recording",
-    "selectBody": "Pick one from the sidebar or start a new recording."
+    "selectRecording": "Pick up where you left off.",
+    "selectBody": "Choose a recording from your library to listen, read, and refine."
   },
   "errors": {
     "audioExtractionFailed": "Audio Extraction Failed",
@@ -2148,7 +2148,7 @@
   },
   "tooltips": {
     "assignFolder": "Assign Folder",
-    "backToHome": "Back to Speakr",
+    "backToHome": "Back to Locol-Vocol",
     "bubbleView": "Bubble view",
     "changeSpeaker": "Change speaker",
     "clearChat": "Clear chat",

@@ -15,6 +15,10 @@
 - 介面全繁體中文；窄視窗預設顯示逐字稿
 - 瘦身：拿掉摘要、聊天、分享、標籤／資料夾、範本、Webhook、群組、PWA 安裝、註冊與忘記密碼；管理頁只保留網址 `/admin` 可進
 
+## 前端風格
+
+介面以 PlaylistBridge／Songferry 的留白與工作區排版為基礎，採用奶油白與暖橘色配色。頁首可一鍵切換明亮／深色模式，選擇會保存在瀏覽器，並支援手機版。共用外觀集中在 `speakr/static/css/locol.css`，語意色彩變數在 `styles.css`；全站使用 Locol-Vocol 文字品牌，Speakr Logo 與來源授權保留於 `/references`。
+
 ## 啟動
 
 ```bash

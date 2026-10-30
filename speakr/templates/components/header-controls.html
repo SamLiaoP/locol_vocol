@@ -4,6 +4,7 @@
     page-header.html, which provides the same state and methods, so every
     page shows the same header. Vue delimiters are ${ }. -#}
     {% include 'components/token_budget_indicator.html' %}
+    {% include 'components/appearance-toggle.html' %}
 
     <!-- Inquire / Install PWA / New Recording header buttons.
          All three use the .btn .btn--sm primitive so their height
@@ -174,6 +175,7 @@
             </a>
             {% endif %}
             <div class="border-t border-[var(--border-primary)] my-1"></div>
+            <a href="/references" class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors"><i class="fas fa-book-open mr-2 w-4 text-center" aria-hidden="true"></i><span>參考與致謝</span></a>
             <!-- locol_vocol: appearance row is only the light/dark toggle -->
             <div @click.stop="toggleDarkMode"
                  class="w-full text-left px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-between cursor-pointer">

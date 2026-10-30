@@ -844,11 +844,11 @@
     "watchFolderVariableWarning": "此標籤被配置為監視資料夾，且提示中包含佔位符變數。透過自動處理目錄攝入的錄音沒有介面讓使用者填寫這些值，因此首次生成摘要時佔位符將被替換為空字串。請刪除佔位符，或在上傳後透過重新處理填寫值。"
   },
   "emptyState": {
-    "readyToCapture": "準備錄製",
-    "readyBody": "拖入音訊檔案、透過麥克風錄製或捕獲系統音訊。Speakr 會將其轉換為可搜尋的轉錄文字，並附帶摘要和聊天。",
+    "readyToCapture": "錄音整理工作台",
+    "readyBody": "上傳會議錄音，或直接開始錄製。自動轉成繁體中文逐字稿，讓每個人的聲音都有名字。",
     "newRecording": "新建錄音",
-    "selectRecording": "選擇一個錄音",
-    "selectBody": "從側邊欄中選擇一個，或開始新的錄音。"
+    "selectRecording": "接著，聽見每個細節。",
+    "selectBody": "從左側選擇一份錄音，繼續閱讀、聆聽與整理。"
   },
   "errors": {
     "audioExtractionFailed": "音訊提取失敗",
@@ -2148,7 +2148,7 @@
   },
   "tooltips": {
     "assignFolder": "分配資料夾",
-    "backToHome": "返回 Speakr",
+    "backToHome": "返回 Locol-Vocol",
     "bubbleView": "氣泡檢視",
     "changeSpeaker": "更改說話者",
     "clearChat": "清空聊天",

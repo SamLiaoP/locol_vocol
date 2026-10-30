@@ -3,19 +3,19 @@
 // own cache namespace, so the activate handler below clears the previous
 // release's app shell instead of serving it forever (issue #357).
 const APP_VERSION = new URLSearchParams(self.location.search).get('v') || 'v5';
-const CACHE_NAME = `Speakr-cache-${APP_VERSION}`;
+const CACHE_NAME = `Locol-Vocol-cache-${APP_VERSION}-orange-20261030-1`;
 const ASSETS_TO_CACHE = [
   '/',
   '/static/offline.html',
   '/static/manifest.json',
   '/static/css/styles.css',
+  '/static/css/primitives.css',
+  '/static/css/locol.css',
   '/static/css/tailwind.css',
   '/static/js/app.modular.js',
   '/static/js/i18n.js',
   '/static/js/csrf-refresh.js',
-  '/static/img/icon-192x192.png',
-  '/static/img/icon-512x512.png',
-  '/static/img/favicon.ico',
+  '/static/img/locol-favicon.svg',
   // Local vendor assets (no external CDN dependencies)
   '/static/vendor/js/vue.global.js',
   '/static/vendor/js/marked.min.js',
@@ -462,7 +462,7 @@ async function syncFailedUploads() {
     console.log(`[Service Worker] Found ${failedUploads.length} failed uploads to retry`);
 
     // Notify that sync started
-    await self.registration.showNotification('Speakr Upload Sync', {
+    await self.registration.showNotification('Locol-Vocol 上傳同步', {
       body: `Retrying ${failedUploads.length} failed upload(s)...`,
       icon: '/static/img/icon-192x192.png',
       badge: '/static/img/icon-192x192.png',
@@ -501,7 +501,7 @@ async function syncFailedUploads() {
     }
 
     // Show final notification
-    await self.registration.showNotification('Speakr Upload Sync Complete', {
+    await self.registration.showNotification('Locol-Vocol 上傳完成', {
       body: `${successCount} succeeded, ${failCount} failed`,
       icon: '/static/img/icon-192x192.png',
       badge: '/static/img/icon-192x192.png',
@@ -513,7 +513,7 @@ async function syncFailedUploads() {
   } catch (error) {
     console.error('[Service Worker] Failed to sync uploads:', error);
 
-    await self.registration.showNotification('Speakr Upload Sync Failed', {
+    await self.registration.showNotification('Locol-Vocol 上傳失敗', {
       body: 'Could not sync failed uploads. Will retry later.',
       icon: '/static/img/icon-192x192.png',
       badge: '/static/img/icon-192x192.png',
@@ -542,7 +542,7 @@ self.addEventListener('push', (event) => {
   if (event.data) {
     const data = event.data.json();
     event.waitUntil(
-      self.registration.showNotification(data.title || 'Speakr Notification', {
+      self.registration.showNotification(data.title || 'Locol-Vocol 通知', {
         body: data.body || 'You have a new notification',
         ...options,
         data: data
@@ -550,7 +550,7 @@ self.addEventListener('push', (event) => {
     );
   } else {
     event.waitUntil(
-      self.registration.showNotification('Speakr Notification', {
+      self.registration.showNotification('Locol-Vocol 通知', {
         body: 'You have a new notification',
         ...options
       })

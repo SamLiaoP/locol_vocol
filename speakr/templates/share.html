@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
+    {% include 'includes/theme_bootstrap.html' %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
     <title>Shared Recording - {{ recording.title }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
         <!-- All dependencies bundled locally for offline support -->
 <script src="{{ url_for('static', filename='vendor/js/vue.global.js') }}"></script>
         <!-- All dependencies bundled locally for offline support -->
@@ -59,14 +60,15 @@
     <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
 </head>
 <body class="h-full bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-300">
     <div id="app" class="h-full flex flex-col" data-recording='{{ recording|tojson|safe }}'>
         <!-- Header -->
         <header class="bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] px-4 py-3 flex items-center justify-between flex-shrink-0 z-50">
             <div class="flex items-center gap-3">
-                <img src="{{ url_for('static', filename='img/favicon.ico') }}" alt="Speakr" class="app-logo w-8 h-8">
+
                 <div>
                     <h1 class="text-xl font-bold text-[var(--text-primary)]">${ recording.title }</h1>
                     <p class="text-sm text-[var(--text-muted)]">Shared Recording</p>
@@ -401,7 +403,7 @@
         <footer class="bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] py-4 px-4 flex-shrink-0">
             <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-[var(--text-muted)]">
                 <div class="flex items-center gap-2">
-                    <span>&copy; {{ now.year }} Speakr</span>
+                    <span>&copy; {{ now.year }} Locol-Vocol</span>
                     <span class="hidden sm:inline">•</span>
                     <span class="text-xs">Powered by advanced AI transcription</span>
                 </div>
@@ -412,7 +414,7 @@
                        rel="noopener noreferrer"
                        class="inline-flex items-center gap-1 text-[var(--text-accent)] hover:text-[var(--text-primary)] transition-colors font-medium">
                         <i class="fab fa-github text-sm"></i>
-                        <span>Speakr</span>
+                        <span>Locol-Vocol</span>
                         <i class="fas fa-external-link-alt text-xs opacity-70"></i>
                     </a>
                 </div>

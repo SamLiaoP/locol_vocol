@@ -8,21 +8,12 @@
        set page_label_key = 'nav.account'    (i18n key for the label)
        include 'components/page-header.html'
 #}
-<header id="global-header" class="bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] px-3 sm:px-4 py-2 flex items-center justify-between flex-shrink-0 z-50 gap-3 sticky top-0" style="min-height: 56px;">
-    <!-- Left: Speakr logo + name + page label -->
+<header id="global-header" class="lv-header bg-[var(--bg-secondary)] border-b border-[var(--border-primary)] px-3 sm:px-4 py-2 flex items-center justify-between flex-shrink-0 z-50 gap-3 sticky top-0">
+    <!-- Product identity and workspace navigation -->
     <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-        <a href="{{ url_for('recordings.index') }}" class="flex items-center gap-2 sm:gap-3 min-w-0 hover:opacity-80 transition-opacity">
-            <img src="{{ url_for('static', filename='img/icon-64.png') }}" srcset="{{ url_for('static', filename='img/icon-64.png') }} 1x, {{ url_for('static', filename='img/icon-128.png') }} 2x" alt="Speakr" class="app-logo w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0">
-            <h1 class="text-lg sm:text-xl font-bold text-[var(--text-primary)] truncate">Speakr</h1>
-        </a>
-        {% if page_label %}
-        <span class="text-[var(--text-muted)] hidden sm:inline" aria-hidden="true">/</span>
-        {% if page_label_key %}
-        <span class="t-meta hidden sm:inline" v-text="t('{{ page_label_key }}')"></span>
-        {% else %}
-        <span class="t-meta hidden sm:inline">{{ page_label }}</span>
-        {% endif %}
-        {% endif %}
+        {% include 'components/wordmark.html' %}
+        {% include 'components/workspace-nav.html' %}
+        {% if page_label_key %}<span class="sr-only" v-text="t('{{ page_label_key }}')"></span>{% endif %}
     </div>
 
     <!-- Right: the same controls as the main app's header -->

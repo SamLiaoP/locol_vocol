@@ -504,3 +504,9 @@ def check_deletion_permission():
 
 
 
+
+
+@system_bp.route('/references', methods=['GET'])
+def references():
+    """Project provenance and upstream attribution, separate from the product brand."""
+    return render_template('references.html')

@@ -1,52 +1,40 @@
-<!-- Empty / landing surface.
-
-     Shows whenever no recording is selected AND we are not in the
-     recording flow. Two flavours:
-       - First-time / truly empty: a friendly "Get started" panel with
-         an explicit Upload and Record CTA.
-       - Recordings list has items but none selected (e.g. just after a
-         deletion auto-selected nothing): a minimal "Select a recording
-         or upload a new one" prompt.
-
-     Sits as the landing surface of the main column. The detail view
-     (its sibling) has its own v-if for the populated state. -->
-<!-- min-h-[60vh] ensures the empty-state has visible height on mobile
-     even when its parent (<main>) has overflow-y: auto and no
-     explicit child-stretching context — without this the flex-1
-     collapsed to 0 height on phones (visible as a blank screen
-     under the global header when no recording is selected). -->
-{# Render whenever neither sibling surface does: not just "nothing
-   selected", but also any state mismatch (a selected recording with no
-   active view) — the prompt is always better than a blank main area. #}
-<div v-if="currentView !== 'recording' && !(currentView === 'detail' && selectedRecording)"
-     class="flex-1 flex items-center justify-center p-6 min-h-[60vh]">
-    <div class="max-w-md w-full text-center">
-        <!-- TRULY EMPTY (no recordings at all) -->
-        <template v-if="!recordings || recordings.length === 0">
-            <div class="mx-auto mb-6 w-20 h-20 rounded-full flex items-center justify-center"
-                 style="background: var(--bg-tertiary);">
-                <i class="fas fa-microphone text-3xl" style="color: var(--text-accent);"></i>
+<!-- Workspace landing; the recording controls continue to use the existing upload flow. -->
+<div v-if="currentView !== 'recording' && !(currentView === 'detail' && selectedRecording)" class="lv-home">
+    <section class="lv-hero">
+        <div class="lv-hero-copy">
+            <div class="lv-workspace-label"><span class="lv-workspace-icon" aria-hidden="true"><i class="fas fa-file-audio"></i></span><p class="lv-eyebrow">AUDIO WORKSPACE / 錄音工作區</p></div>
+            <h2 class="lv-workspace-title">錄音整理工作台</h2>
+            <p class="lv-intro lv-workspace-description">將會議、訪談或課程錄音，整理成可編輯的逐字稿。辨識說話者、對照音訊，接著完成校訂與匯出。</p>
+            <ul class="lv-workspace-features" aria-label="工作台功能"><li>繁體中文逐字稿</li><li>說話者辨識</li><li>同步播放</li></ul>
+            <div class="lv-hero-actions">
+                <button @click="switchToUploadView" class="btn btn--primary lv-primary-action"><i class="fas fa-plus" aria-hidden="true"></i> 新增錄音 <span aria-hidden="true">↗</span></button>
+                <a href="/people" class="lv-text-link">管理人物 <span aria-hidden="true">→</span></a>
             </div>
-            <h2 class="text-2xl font-semibold mb-2" style="color: var(--text-primary);" v-text="t('emptyState.readyToCapture')"></h2>
-            <p class="t-body mb-6" style="color: var(--text-muted);" v-text="t('emptyState.readyBody')"></p>
-            <div class="flex flex-col sm:flex-row gap-2 justify-center">
-                <button @click="switchToUploadView" class="btn btn--primary">
-                    <i class="fas fa-plus"></i><span v-text="t('emptyState.newRecording')"></span>
-                </button>
+            <p v-if="recordings && recordings.length" class="lv-returning">${ t('emptyState.selectBody') }</p>
+        </div>
+        <div class="lv-sound-object" aria-hidden="true">
+            <div class="lv-sound-top"><span>FIELD NOTES</span><span>VOL. 01</span></div>
+            <div class="lv-waveform">
+                {% for h in [14,22,36,27,55,83,44,67,100,74,46,30,60,87,112,80,48,68,94,58,34,23,42,31,18,10] %}<i style="--bar-height: {{ h }}px"></i>{% endfor %}
             </div>
-        </template>
+            <div class="lv-sound-bottom"><span>聲音有了形狀。</span><span>00:00 — ∞</span></div>
+            <div class="lv-paper-note">EVERY VOICE.<br>EVERY DETAIL.<span>每一句，都值得留下。</span></div>
+        </div>
+    </section>
 
-        <!-- SOMETHING SELECTABLE EXISTS but nothing currently selected -->
-        <template v-else>
-            <div class="mx-auto mb-4 w-14 h-14 rounded-full flex items-center justify-center"
-                 style="background: var(--bg-tertiary);">
-                <i class="fas fa-list text-xl" style="color: var(--text-muted);"></i>
-            </div>
-            <h2 class="text-lg font-semibold mb-1" style="color: var(--text-primary);" v-text="t('emptyState.selectRecording')"></h2>
-            <p class="t-meta mb-5" v-text="t('emptyState.selectBody')"></p>
-            <button @click="switchToUploadView" class="btn btn--ghost">
-                <i class="fas fa-plus"></i><span v-text="t('emptyState.newRecording')"></span>
+    <section class="lv-start-panel" aria-labelledby="lv-start-title">
+        <div class="lv-section-head"><div><p class="lv-eyebrow">01 / WORKSPACE</p><h3 id="lv-start-title">從一段對話開始</h3></div><span class="lv-badge">中英轉錄 · 自動分人</span></div>
+        <div class="lv-start-grid">
+            <button @click="switchToUploadView" class="lv-start-card">
+                <span class="lv-card-icon"><i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i></span>
+                <span class="lv-card-text"><strong>帶入你的錄音</strong><span>上傳音訊或影片，開始整理逐字稿。</span><small>MP3 / M4A / WAV / MP4</small></span><span class="lv-card-arrow" aria-hidden="true">↗</span>
             </button>
-        </template>
-    </div>
+            <a href="/people" class="lv-start-card">
+                <span class="lv-card-icon lv-card-icon--people"><i class="fas fa-user-group" aria-hidden="true"></i></span>
+                <span class="lv-card-text"><strong>讓聲音對上名字</strong><span>建立人物語音片段，讓下次辨識更熟悉。</span><small>VOICE LIBRARY</small></span><span class="lv-card-arrow" aria-hidden="true">↗</span>
+            </a>
+        </div>
+        <div class="lv-process"><span><b>01</b> 上傳或錄製</span><i aria-hidden="true">→</i><span><b>02</b> 轉錄與分人</span><i aria-hidden="true">→</i><span><b>03</b> 聆聽、編輯、匯出</span></div>
+    </section>
+    <footer class="lv-footer"><span>LOCOL / VOCOL — 留住對話裡的每個細節。</span><a href="/references">參考與致謝 ↗</a></footer>
 </div>

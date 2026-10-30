@@ -60,15 +60,18 @@ def test_page_templates_are_found():
 
 
 @pytest.mark.parametrize("rel", PAGES)
-def test_each_page_links_the_compiled_stylesheet_last_in_head(rel):
+def test_each_page_loads_utilities_then_the_shared_design_layer(rel):
     text = _read(rel)
     assert "tailwind.min.js" not in text and "tailwind.config" not in text, rel
     head = text.split("</head>", 1)[0]
     assert head.count(CSS_LINK) == 1, rel
-    # Last stylesheet in <head>, as the runtime-generated styles were, so the
-    # cascade order against the page's own styles is unchanged.
-    after = head.split(CSS_LINK, 1)[1]
+    design_link = "filename='css/locol.css'"
+    assert head.count(design_link) == 1, rel
+    assert head.index(CSS_LINK) < head.index(design_link), rel
+    # Shared product styles override utility defaults on every page.
+    after = head.split(design_link, 1)[1]
     assert "<link" not in after and "<style" not in after, rel
+
 
 
 @pytest.mark.parametrize("rel", [p for p in PAGES if I18N_SCRIPT in _read(p)])

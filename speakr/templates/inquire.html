@@ -19,16 +19,15 @@
     </script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <title>Inquire Mode - Speakr</title>
+    <title>Inquire Mode - Locol-Vocol</title>
         <!-- All dependencies bundled locally for offline support -->
         <!-- All dependencies bundled locally for offline support -->
         <!-- All dependencies bundled locally for offline support -->
         <!-- All dependencies bundled locally for offline support -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/icon-32x32.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css', v='orange-20261030-1') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/locol-favicon.svg') }}">
 
     <!-- Loading overlay to prevent FOUC -->
 
@@ -196,7 +195,8 @@
     <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
     <!-- Scripts after every stylesheet, so that no page is painted while a
          script blocks the parser before the stylesheets are known. -->
     <script src="{{ url_for('static', filename='vendor/js/vue.global.js') }}"></script>
@@ -226,8 +226,8 @@
                 
                 <!-- Logo and Title (clickable to go back) -->
                 <a href="/" class="flex items-center gap-2 sm:gap-3 min-w-0 hover:opacity-80 transition-opacity">
-                    <img src="{{ url_for('static', filename='img/icon-64.png') }}" srcset="{{ url_for('static', filename='img/icon-64.png') }} 1x, {{ url_for('static', filename='img/icon-128.png') }} 2x" alt="Speakr" class="app-logo w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0">
-                    <h1 class="text-lg sm:text-xl font-bold text-[var(--text-primary)] truncate">Speakr</h1>
+
+                    <h1 class="text-lg sm:text-xl font-bold text-[var(--text-primary)] truncate">Locol-Vocol</h1>
                 </a>
                 <span class="text-[var(--text-muted)] hidden sm:inline" aria-hidden="true">/</span>
                 <span class="t-meta hidden sm:inline" v-text="t('inquire.title')"></span>

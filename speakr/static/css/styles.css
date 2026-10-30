@@ -30,20 +30,18 @@ body.unloaded {
 
 /* Color Scheme CSS Variables */
 :root {
-    /* locol_vocol palette — light. Warm paper neutrals, one apricot accent
-       (the logo's colour). Every name below is used by the templates; the
-       --accent* tokens are the single source the rest derive from. */
-    --accent: #d4762a;
-    --accent-hover: #bf651f;
-    --accent-soft: #f9e7d6;
-    --accent-soft-hover: #f4d9bf;
-    --on-accent: #ffffff;
+    /* Locol-Vocol: cream, warm ink, and orange. */
+    --accent: #f5a467;
+    --accent-hover: #ed9554;
+    --accent-soft: #fbe6d4;
+    --accent-soft-hover: #f7dac3;
+    --on-accent: #35271f;
     --accent-primary: var(--accent);
     --text-accent-contrast: var(--on-accent);
 
-    --bg-primary: #f5f3ef;
+    --bg-primary: #fcf8f3;
     --bg-secondary: #fffdfa;
-    --bg-tertiary: #efece6;
+    --bg-tertiary: #f4ebe1;
     --bg-accent: var(--accent-soft);
     --bg-accent-hover: var(--accent-soft-hover);
     --bg-button: var(--accent);
@@ -51,35 +49,35 @@ body.unloaded {
     --bg-danger: #d14b3f;
     --bg-danger-hover: #b8402f;
     --bg-danger-light: #fbe5e2;
-    --bg-info-light: #f9e7d6;
+    --bg-info-light: #fbe6d4;
     --bg-warn-light: #fbf0d6;
     --bg-success-light: #dff3e7;
-    --bg-pending-light: #efece6;
-    --bg-input: #ffffff;
+    --bg-pending-light: #f4ebe1;
+    --bg-input: #fffdfa;
     --bg-audio-player: var(--bg-secondary);
 
-    --text-primary: #1f1d1a;
-    --text-secondary: #4b4741;
-    --text-muted: #7c766d;
-    --text-light: #a7a199;
-    --text-accent: #b35f1a;
+    --text-primary: #35271f;
+    --text-secondary: #67564a;
+    --text-muted: #7d6a5c;
+    --text-light: #928173;
+    --text-accent: #9a4b1e;
     --text-button: var(--on-accent);
     --text-danger: #b9382e;
     --text-danger-strong: #9a2b22;
-    --text-info-strong: #8a4a12;
+    --text-info-strong: #9a4b1e;
     --text-warn-strong: #8a5a0a;
     --text-success-strong: #1f6b45;
-    --text-pending-strong: #4b4741;
+    --text-pending-strong: #67564a;
 
-    --border-primary: #e6e1d8;
-    --border-secondary: #d5cfc4;
-    --border-accent: #e9bf98;
+    --border-primary: #e8dbce;
+    --border-secondary: #d7c5b4;
+    --border-accent: #d99b6c;
     --border-danger: #e39a92;
     --border-focus: var(--accent);
-    --ring-focus: #f2d3b6;
+    --ring-focus: #e8b38e;
 
     --scrollbar-track: transparent;
-    --scrollbar-thumb: #d5cfc4;
+    --scrollbar-thumb: #d7c5b4;
     --scrollbar-thumb-hover: #bfb8ac;
 
     /* Toast notification colors */
@@ -89,19 +87,18 @@ body.unloaded {
 
 /* Dark Theme Base */
 .dark {
-    /* locol_vocol palette — dark. Near-black warm greys, the same apricot
-       accent lifted for contrast; buttons carry dark text on apricot. */
-    --accent: #e9a063;
-    --accent-hover: #f0b27f;
-    --accent-soft: #3a2a1b;
-    --accent-soft-hover: #4a3522;
-    --on-accent: #1b1208;
+    /* Dark companion palette. */
+    --accent: #f5a467;
+    --accent-hover: #f5a467;
+    --accent-soft: #493022;
+    --accent-soft-hover: #593a29;
+    --on-accent: #35271f;
     --accent-primary: var(--accent);
     --text-accent-contrast: var(--on-accent);
 
-    --bg-primary: #121315;
-    --bg-secondary: #1a1b1e;
-    --bg-tertiary: #232528;
+    --bg-primary: #201a16;
+    --bg-secondary: #2b231e;
+    --bg-tertiary: #372d26;
     --bg-accent: var(--accent-soft);
     --bg-accent-hover: var(--accent-soft-hover);
     --bg-button: var(--accent);
@@ -109,35 +106,35 @@ body.unloaded {
     --bg-danger: #d9534a;
     --bg-danger-hover: #e3675f;
     --bg-danger-light: #3b1f1c;
-    --bg-info-light: #3a2a1b;
+    --bg-info-light: #493022;
     --bg-warn-light: #3a2f14;
     --bg-success-light: #16302a;
     --bg-pending-light: #26282b;
-    --bg-input: #1f2124;
+    --bg-input: #302720;
     --bg-audio-player: var(--bg-secondary);
 
-    --text-primary: #ecebe8;
-    --text-secondary: #c2c0bb;
-    --text-muted: #8f8d88;
-    --text-light: #6f6d68;
-    --text-accent: #f0b27f;
+    --text-primary: #f8eee5;
+    --text-secondary: #d8c7b9;
+    --text-muted: #bca594;
+    --text-light: #9f8876;
+    --text-accent: #f5a467;
     --text-button: var(--on-accent);
     --text-danger: #f08a82;
     --text-danger-strong: #f6aaa3;
-    --text-info-strong: #f0c9a3;
+    --text-info-strong: #f5a467;
     --text-warn-strong: #e8c66f;
     --text-success-strong: #7ed3a6;
-    --text-pending-strong: #c2c0bb;
+    --text-pending-strong: #d8c7b9;
 
-    --border-primary: #2b2d31;
-    --border-secondary: #3a3d42;
-    --border-accent: #7a5330;
+    --border-primary: #493a2f;
+    --border-secondary: #614b3b;
+    --border-accent: #a66b40;
     --border-danger: #a04a42;
     --border-focus: var(--accent);
-    --ring-focus: #4a3522;
+    --ring-focus: #593a29;
 
     --scrollbar-track: transparent;
-    --scrollbar-thumb: #3a3d42;
+    --scrollbar-thumb: #614b3b;
     --scrollbar-thumb-hover: #4a4e55;
 }
 

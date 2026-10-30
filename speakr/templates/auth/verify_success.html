@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% include 'includes/theme_bootstrap.html' %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <title>{{ title }} - Speakr</title>
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/svg+xml">
+    <title>{{ title }} - Locol-Vocol</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/locol-favicon.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
 
     {% include 'includes/loading_overlay.html' %}
 
@@ -38,15 +39,16 @@
     <!-- Tailwind utilities, compiled at build time (scripts/build_css.sh). Last in
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)]">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col min-h-screen">
         <header class="flex justify-between items-center mb-6 pb-4 border-b border-[var(--border-primary)]">
             <h1 class="text-3xl font-bold text-[var(--text-primary)]">
                 <a href="{{ url_for('recordings.index') }}" class="flex items-center">
-                    <img src="{{ url_for('static', filename='img/favicon.ico') }}" alt="Speakr Logo" class="app-logo h-9 w-9 mr-2">
-                    Speakr
+
+                    Locol-Vocol
                 </a>
             </h1>
         </header>
@@ -73,7 +75,7 @@
         </main>
 
         <footer class="text-center py-4 mt-8 text-xs text-[var(--text-light)] border-t border-[var(--border-primary)]">
-            Speakr &copy; {{ now.year }}
+            Locol-Vocol &copy; {{ now.year }}
         </footer>
     </div>
 

@@ -102,9 +102,13 @@ export function useRecordings(state, utils, reprocessComposable) {
                 // last viewed one here would open the detail view and rewrite
                 // the address bar to /recordings/<id>, losing the label link.
                 // Consume the one-shot flag so later loads behave normally.
+                // The product wordmark opens the overview explicitly, even
+                // when a previous recording is remembered in this browser.
+                const wantsOverview = typeof window !== 'undefined'
+                    && new URLSearchParams(window.location?.search || '').get('home') === '1';
                 if (labelDeepLinkPending && labelDeepLinkPending.value) {
                     labelDeepLinkPending.value = false;
-                } else {
+                } else if (!wantsOverview) {
                     const lastRecordingId = localStorage.getItem('lastSelectedRecordingId');
                     if (lastRecordingId && recordingsList.length > 0) {
                         const recordingToSelect = recordingsList.find(r => r.id == lastRecordingId);

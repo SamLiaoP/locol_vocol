@@ -1,0 +1,6 @@
+<nav class="lv-nav" aria-label="主要導覽">
+    <a href="{{ url_for('recordings.index', home=1) }}" {% if request.path == '/' or request.path.startswith('/recordings/') %}aria-current="page"{% endif %}>錄音</a>
+    <a href="{{ url_for('speakers.people_page') }}" {% if request.endpoint == 'speakers.people_page' %}aria-current="page"{% endif %}>人物</a>
+    <a href="/account" {% if request.path == '/account' %}aria-current="page"{% endif %}>設定</a>
+    <a href="{{ url_for('system.references') }}" {% if request.endpoint == 'system.references' %}aria-current="page"{% endif %}>參考</a>
+</nav>
