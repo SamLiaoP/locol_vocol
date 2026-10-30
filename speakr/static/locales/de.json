@@ -931,7 +931,10 @@
     "uploadTimedOut": "Upload-Zeitüberschreitung",
     "validationError": "Validierungsfehler",
     "waitAndRetryGuidance": "Einige Minuten warten und erneut versuchen",
-    "shareTarget_storage_quota": "Die geteilte Datei wurde nicht gespeichert, weil Ihr Speicher voll ist."
+    "shareTarget_storage_quota": "Die geteilte Datei wurde nicht gespeichert, weil Ihr Speicher voll ist.",
+    "creditsExhausted": "Guthaben aufgebraucht",
+    "creditsExhaustedGuidance": "Laden Sie Guthaben auf oder wechseln Sie den Tarif des Transkriptionsdienstes und verarbeiten Sie diese Aufnahme erneut.",
+    "creditsExhaustedMessage": "Das Konto beim Transkriptionsdienst hat nicht genug Guthaben für diese Aufnahme."
   },
   "eventExtraction": {
     "description": "Wenn aktiviert, identifiziert die KI Meetings, Termine und Fristen in Ihren Aufnahmen und erstellt herunterladbare Kalenderereignisse.",
@@ -1597,7 +1600,8 @@
     "signOut": "Abmelden",
     "teamManagement": "Gruppenverwaltung",
     "upload": "Hochladen",
-    "userProfile": "Benutzerprofil"
+    "userProfile": "Benutzerprofil",
+    "people": "Personen"
   },
   "notes": {
     "cancelEdit": "Bearbeitung abbrechen",
@@ -2203,7 +2207,14 @@
     "speaker": "Sprecher {{number}}",
     "speakerLabels": "Sprecher-Labels",
     "title": "Transkription",
-    "unknownSpeaker": "Unbekannter Sprecher"
+    "unknownSpeaker": "Unbekannter Sprecher",
+    "doubleClickRename": "Doppelklicken, um diese Person in allen Aufnahmen umzubenennen",
+    "doubleClickEditSegment": "Doppelklicken, um diesen Abschnitt zu bearbeiten",
+    "technicalDetails": "Technische Details",
+    "speakerRenamed": "„{{from}}“ überall in „{{to}}“ umbenannt",
+    "speakerRenameFailed": "Umbenennen fehlgeschlagen: {{error}}",
+    "defaultSpeakerLabel": "Sprecher {{n}}",
+    "doubleClickPlay": "Doppelklicken, um ab diesem Abschnitt abzuspielen"
   },
   "unifiedShareModal": {
     "noPublicLinks": "Noch keine öffentlichen Freigabe-Links",
@@ -2304,5 +2315,75 @@
   "usageMeters": {
     "tokenTooltip": "KI-Tokens diesen Monat: {{used}} von {{budget}}",
     "storageTooltip": "Speicher: {{used}} von {{quota}}"
+  },
+  "people": {
+    "title": "Personen",
+    "subtitle": "Alle in Aufnahmen benannten Personen und ihre Referenzclips. Die Clips werden mit jeder neuen Aufnahme gesendet, damit die Sprechergruppen Namen erhalten.",
+    "empty": "Noch keine Personen. Benennen Sie eine Person per Doppelklick auf ihre Sprecherbezeichnung in einer Aufnahme.",
+    "loading": "Wird geladen…",
+    "search": "Namen suchen",
+    "count": "{{n}} Personen",
+    "clips": "{{n}} Clips",
+    "seconds": "{{s}} s",
+    "hits": "{{n}} Treffer",
+    "noClips": "keine Clips (keine Wiedererkennung)",
+    "lastUsed": "Zuletzt erkannt",
+    "recordings": "in {{n}} Aufnahmen",
+    "rename": "Umbenennen",
+    "renamePrompt": "Neuer Name (gilt für alle Aufnahmen)",
+    "renamed": "In {{name}} umbenannt",
+    "merge": "Zusammenführen",
+    "mergeHint": "Wählen Sie die Personen aus und klicken Sie dann auf „Mit dieser Person zusammenführen“.",
+    "mergeInto": "Mit dieser Person zusammenführen",
+    "mergeConfirm": "{{sources}} mit {{target}} zusammenführen? Namen in allen Aufnahmen und sämtliche Sprachclips werden {{target}} zugeordnet.",
+    "merged": "Zusammengeführt, {{n}} Aufnahmen aktualisiert",
+    "selectForMerge": "Zum Zusammenführen auswählen",
+    "delete": "Person löschen",
+    "deleteConfirm": "{{name}} löschen? Die Clips werden ebenfalls gelöscht; Namen in Aufnahmen bleiben erhalten.",
+    "deleted": "Gelöscht",
+    "clipsTitle": "Sprachclips",
+    "clipFrom": "aus „{{title}}“",
+    "clipFromDeleted": "Quellaufnahme gelöscht",
+    "clipLabel": "zuvor {{label}}",
+    "clipSource_confirmed": "manuell benannt",
+    "clipSource_backfill": "nachträglich erstellt",
+    "clipDelete": "Clip löschen",
+    "clipDeleteConfirm": "Diesen Clip löschen? Ist es der einzige, wird diese Person nicht mehr automatisch erkannt.",
+    "clipDeleted": "Clip gelöscht",
+    "play": "Abspielen",
+    "pause": "Pause",
+    "backfill": "Clips aus vorhandenen Aufnahmen erstellen",
+    "backfillHint": "Alle Aufnahmen durchsuchen und Clips für benannte Personen ohne Clips erstellen.",
+    "backfillDone": "Fertig: {{created}} erstellt, {{skipped}} bereits vorhanden",
+    "openRecording": "Aufnahme öffnen",
+    "error": "Fehler: {{error}}",
+    "howItWorks": "So funktioniert es",
+    "howItWorksText": "Pro Person werden bis zu 30 Sekunden klare Sprache je Aufnahme gespeichert. Bei neuen Transkriptionen werden die Clips vor die Aufnahme gesetzt und gemeinsam gesendet. Ordnet die Sprechererkennung einen Clip und eine Stimme derselben Gruppe zu, wird der Name übernommen. Nicht erkannte Personen können per Doppelklick benannt werden; daraus entsteht ein neuer Clip. Beanspruchen zwei Personen dieselbe Gruppe, bleibt sie unbenannt."
+  },
+  "cost": {
+    "transcription": "Transkription",
+    "summary": "Zusammenfassung",
+    "model": "Modell",
+    "min": "Min.",
+    "sec": "s",
+    "balance": "Geschätztes Guthaben",
+    "spent": "Ausgaben",
+    "balanceNotSet": "Keine Aufladung eingetragen. Tragen Sie unter Verwaltung → Systemeinstellungen billing_topup_usd und billing_topup_date ein, um das geschätzte Guthaben anzuzeigen.",
+    "balanceTooltip": "Aufladung ${{topup}} ({{date}}) − erfasste Ausgaben ${{spend}}. Schätzung, keine Rechnung.",
+    "chunkProgress": "{{done}} / {{total}} Abschnitte fertig",
+    "elapsed": "Vergangen",
+    "remaining": "Verbleibend",
+    "credits": "ElevenLabs-Guthaben",
+    "creditsUnknown": "nicht verfügbar",
+    "creditsNoPermission": "Diesem Schlüssel fehlt die Berechtigung user_read; die Nutzung kann nicht gelesen werden.",
+    "creditsKeyLine": "Schlüssel {{n}} ({{key}}): verbraucht {{used}} / {{limit}}, verbleibend {{remaining}}, Zurücksetzung {{reset}}",
+    "creditsKeyError": "Schlüssel {{n}} ({{key}}): {{error}}",
+    "creditsActiveMark": "  ← aktiv"
+  },
+  "engine": {
+    "tooltip": "Aktuelle Transkriptionsengine. Ein Wechsel gilt sofort für neue Uploads.",
+    "noKey": " (kein Schlüssel)",
+    "switched": "Transkriptionsengine zu {{name}} gewechselt",
+    "switchFailed": "Wechsel fehlgeschlagen: {{error}}"
   }
 }

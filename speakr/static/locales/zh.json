@@ -2257,7 +2257,7 @@
     "technicalDetails": "技術細節",
     "speakerRenamed": "已將「{{from}}」全部改為「{{to}}」",
     "speakerRenameFailed": "改名失敗：{{error}}",
-    "defaultSpeakerLabel": "說話者{n}",
+    "defaultSpeakerLabel": "說話者{{n}}",
     "doubleClickPlay": "雙擊從這一段開始播放"
   },
   "unifiedShareModal": {

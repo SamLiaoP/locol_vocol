@@ -2257,7 +2257,7 @@
     "technicalDetails": "Technical details",
     "speakerRenamed": "Renamed \"{{from}}\" to \"{{to}}\" everywhere",
     "speakerRenameFailed": "Rename failed: {{error}}",
-    "defaultSpeakerLabel": "Speaker {n}",
+    "defaultSpeakerLabel": "Speaker {{n}}",
     "doubleClickPlay": "Double-click to play from this segment"
   },
   "unifiedShareModal": {

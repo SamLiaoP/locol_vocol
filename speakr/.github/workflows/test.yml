@@ -161,6 +161,7 @@ jobs:
       - name: Browser smoke test
         env:
           SPEAKR_BROWSER_SMOKE: '1'
+          SPEAKR_SMOKE_ALLOW_MUTATIONS: '1'
           SPEAKR_BASE_URL: http://127.0.0.1:8899
         run: pytest tests/e2e/test_browser_smoke.py -q -p no:cacheprovider --noconftest -rs
 

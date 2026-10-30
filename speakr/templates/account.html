@@ -4349,10 +4349,8 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
             // + FormData so the page doesn't reload and the active tab
             // is preserved. Falls back to the browser's native submit
             // if fetch fails (network down etc.) so the user never
-            // loses their edit. The existing top-right notification
-            // ("Preferences saved" / "Settings saved") rendered
-            // elsewhere in the page handles success feedback — this
-            // handler doesn't add its own.
+            // loses their edit. This is the sole submit and feedback
+            // handler for all three forms.
             function wireAjaxFormSubmit(formId) {
                 const form = document.getElementById(formId);
                 if (!form) return;
@@ -4394,6 +4392,7 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
                         if (!response.ok) {
                             throw new Error(`HTTP ${response.status}`);
                         }
+                        showToast(t(formId === 'accountInfoForm' ? 'messages.profileUpdated' : 'messages.settingsSaved'), 'success');
                     } catch (err) {
                         console.error('[settings save]', err);
                         // Network failure: fall back to a real submit
@@ -6063,81 +6062,9 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
 
         // ========== END FOLDERS MANAGEMENT ==========
 
-        // AJAX form submission for Account Information
-        const accountInfoForm = document.getElementById('accountInfoForm');
-        if (accountInfoForm) {
-            accountInfoForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
+        // Settings forms are submitted by wireAjaxFormSubmit above.
+        // Keep one handler per form so a single save makes one request.
 
-                const formData = new FormData(accountInfoForm);
-
-                try {
-                    const response = await fetch('/account', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (response.ok) {
-                        showToast('Account information updated successfully', 'success');
-                    } else {
-                        var text = await response.text();
-                        showToast('Failed to update account information', 'error');
-                    }
-                } catch (error) {
-                    showToast('Network error: ' + error.message, 'error');
-                }
-            });
-        }
-        
-        // AJAX form submission for Preferences
-        const preferencesForm = document.getElementById('preferencesForm');
-        if (preferencesForm) {
-            preferencesForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const formData = new FormData(preferencesForm);
-                try {
-                    const response = await fetch('/account', {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        body: formData,
-                    });
-                    if (response.ok) {
-                        showToast('Preferences saved', 'success');
-                    } else {
-                        showToast('Failed to save preferences', 'error');
-                    }
-                } catch (error) {
-                    showToast('Network error: ' + error.message, 'error');
-                }
-            });
-        }
-
-        // AJAX form submission for Custom Prompts
-        const customPromptsForm = document.getElementById('customPromptsForm');
-        if (customPromptsForm) {
-            customPromptsForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const formData = new FormData(customPromptsForm);
-                
-                try {
-                    const response = await fetch('/account', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    if (response.ok) {
-                        showToast('Custom prompt saved successfully', 'success');
-                    } else {
-                        const text = await response.text();
-                        showToast('Failed to save custom prompt', 'error');
-                    }
-                } catch (error) {
-                    showToast('Network error: ' + error.message, 'error');
-                }
-            });
-        }
-        
         // Check for stored tab preference (from language change reload)
         const storedTab = localStorage.getItem('activeAccountTab');
         if (storedTab) {

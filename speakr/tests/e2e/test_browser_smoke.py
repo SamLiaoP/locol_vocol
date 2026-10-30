@@ -31,6 +31,7 @@ Console messages that are not failures (documented allowlist):
 """
 
 import os
+import json
 import re
 import sys
 
@@ -51,7 +52,7 @@ _example = read_example()
 USER = os.environ.get("SPEAKR_SMOKE_USER", _example.get("ADMIN_EMAIL", "admin@example.com"))
 PASSWORD = os.environ.get("SPEAKR_SMOKE_PASSWORD", _example.get("ADMIN_PASSWORD", "changeme"))
 
-MENU_ENTRIES = ("Notifications", "Settings", "Shared Transcripts", "Sign Out")
+MENU_TARGETS = ("a[href='/people']", "a[href='/account']", "a[href='/references']", "form[action='/logout'] button")
 IGNORED_CONSOLE = (re.compile(r"chrome-extension://"), re.compile(r"Failed to load resource"))
 PLAY_CDN = re.compile(r"tailwind\.min\.js|cdn\.tailwindcss\.com")
 # A translation key: two or more dot-separated identifiers, the first one
@@ -161,8 +162,7 @@ def _check_user_menu(page, path):
     toggle.click()
     menu = page.locator("[data-user-menu-dropdown]:visible").first
     menu.wait_for(state="visible", timeout=5000)
-    text = menu.inner_text()
-    missing = [entry for entry in MENU_ENTRIES if entry not in text]
+    missing = [selector for selector in MENU_TARGETS if menu.locator(selector).count() != 1]
     assert not missing, f"{path}: user menu is missing {missing}"
     page.keyboard.press("Escape")
     page.mouse.click(5, 400)
@@ -185,21 +185,25 @@ def test_settings_pages(browser_page, path):
     header = page.locator("#global-header")
     assert header.count() == 1, f"{path}: no shared page header"
     assert header.get_attribute("data-v-app") is not None, f"{path}: the page header did not mount"
-    label = header.locator(".t-meta").first.inner_text().strip()
+    label = header.locator(".sr-only").first.inner_text().strip()
     assert label, f"{path}: the page label in the header is empty"
     _check_header_translated(page, path, "#global-header")
     _check_user_menu(page, path)
     if path == "/account":
         tabs = page.locator(".tabs button:visible, .tabs a:visible")
-        assert tabs.count() >= 3, "/account: the tab strip did not render"
+        assert tabs.count() == 2, "/account: the tab strip did not render"
     _check_common(page, problems, path)
 
 
 def test_inquire_page(browser_page):
     page, problems = browser_page
     response = _open(page, problems, "/inquire")
-    if response is None or response.status != 200 or "/inquire" not in page.url:
-        pytest.skip("Inquire mode is not enabled")
+    assert response is not None and response.status == 200
+    if "/inquire" not in page.url:
+        # Disabled in Locol-Vocol: the route deliberately returns to recordings.
+        assert page.url.rstrip('/') == BASE
+        _check_common(page, problems, '/inquire (disabled redirect)')
+        return
     problems.failed[:] = [f for f in problems.failed if "/inquire " not in f]
     assert page.locator("#inquire-app[data-v-app]").count() == 1, "/inquire: the app did not mount"
     _check_header_translated(page, "/inquire", "#inquire-app header")
@@ -219,53 +223,175 @@ def test_a_recording_detail_view(browser_page):
     _check_common(page, problems, path)
 
 
-_CHAT_GAP = """() => {
-    const p = document.querySelector('.floating-chat-panel');
-    const c = document.getElementById('mainContentColumns');
-    if (!p || !c) return null;
-    const r = p.getBoundingClientRect(), b = c.getBoundingClientRect();
-    return {dx: Math.round(b.right - r.right), dy: Math.round(b.bottom - r.bottom),
-            inside: r.top >= b.top && r.left >= b.left && r.right <= b.right && r.bottom <= b.bottom};
-}"""
-
-
-def test_the_chat_panel_layout_is_shared_and_anchored(browser_page):
-    """One chat layout for every recording, kept as a gap to the content area's corner.
-
-    It used to be saved per recording with absolute coordinates: the panel
-    opened on some recordings only, and after a window or sidebar change it
-    floated in the middle of the page.
-    """
-    page, _ = browser_page
-    listing = page.request.get(f"{BASE}/api/recordings?per_page=2")
+def test_removed_chat_does_not_appear_on_recording_pages(browser_page):
+    page, problems = browser_page
+    listing = page.request.get(f"{BASE}/api/recordings?per_page=1")
     items = listing.json().get("recordings", []) if listing.ok else []
-    if len(items) < 2:
-        pytest.skip("needs two recordings")
-    first, second = (f"/recordings/{r['id']}" for r in items[:2])
-    page.goto(f"{BASE}{first}")
-    page.wait_for_timeout(2500)
-    page.evaluate("() => localStorage.removeItem('chat_panel_layout')")
-    page.click(".floating-chat-fab")
-    page.wait_for_timeout(300)
-    head = page.locator(".floating-chat-header-title").bounding_box()
-    page.mouse.move(head["x"] + 20, head["y"] + 10)
-    page.mouse.down()
-    page.mouse.move(head["x"] - 80, head["y"] - 40, steps=8)
-    page.mouse.up()
-    page.wait_for_timeout(300)
-    moved = page.evaluate(_CHAT_GAP)
-    assert moved and moved["inside"]
 
-    page.goto(f"{BASE}{second}")
-    page.wait_for_timeout(2500)
-    there = page.evaluate(_CHAT_GAP)
-    assert there is not None, "the chat panel did not open on the second recording"
-    assert there["inside"] and abs(there["dx"] - moved["dx"]) <= 1
+    if not items:
+        pytest.skip('No recordings; the empty library is covered by test_main_view')
+    _open(page, problems, f"/recordings/{items[0]['id']}")
+    assert page.locator('.floating-chat-fab:visible').count() == 0
+    _check_common(page, problems, 'recording without removed chat')
 
-    page.set_viewport_size({"width": 1200, "height": 900})
-    page.wait_for_timeout(600)
-    narrower = page.evaluate(_CHAT_GAP)
-    assert narrower["inside"] and abs(narrower["dx"] - moved["dx"]) <= 1
-    keys = page.evaluate("() => Object.keys(localStorage).filter(k => k.startsWith('chat_panel'))")
-    assert keys == ["chat_panel_layout"]
-    page.set_viewport_size({"width": 1400, "height": 900})
+
+@pytest.mark.parametrize("path", ["/people", "/references"])
+def test_product_pages(browser_page, path):
+    page, problems = browser_page
+    response = _open(page, problems, path)
+    assert response is not None and response.status == 200
+    assert page.locator('h1:visible, h2:visible').count() >= 1
+    _check_common(page, problems, path)
+
+
+@pytest.mark.parametrize("path", ["/?home=1", "/people", "/account", "/references"])
+def test_appearance_switch_survives_reload(browser_page, path):
+    page, problems = browser_page
+    _open(page, problems, path)
+    toggle = page.locator('[data-theme-toggle], [data-static-theme-toggle]').first
+    assert toggle.count() == 1
+    original = page.locator('html').get_attribute('class') or ''
+    was_dark = 'dark' in original.split()
+    toggle.click()
+    page.wait_for_function("expected => document.documentElement.classList.contains('dark') === expected", arg=not was_dark)
+    page.reload()
+    page.wait_for_function("!document.documentElement.classList.contains('app-loading')")
+    assert ('dark' in (page.locator('html').get_attribute('class') or '').split()) == (not was_dark)
+    # The selected appearance also follows navigation to another page.
+    page.goto(f"{BASE}/references")
+    assert ('dark' in (page.locator('html').get_attribute('class') or '').split()) == (not was_dark)
+    page.locator('[data-static-theme-toggle]').click()
+    page.wait_for_function("expected => document.documentElement.classList.contains('dark') === expected", arg=was_dark)
+    _check_common(page, problems, path + ' appearance')
+
+
+@pytest.mark.parametrize("path", ["/?home=1", "/people", "/account", "/references"])
+def test_mobile_pages_fit_the_viewport(browser_page, path):
+    page, problems = browser_page
+    page.set_viewport_size({"width": 390, "height": 844})
+    try:
+        _open(page, problems, path)
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        switch = page.locator('[data-theme-toggle], [data-static-theme-toggle]').first
+        assert switch.is_visible()
+        bounds = switch.bounding_box()
+        assert bounds and bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= 390
+        _check_common(page, problems, path + ' mobile')
+    finally:
+        page.set_viewport_size({"width": 1400, "height": 900})
+
+
+def test_mobile_recording_keeps_title_and_player(browser_page):
+    page, problems = browser_page
+    listing = page.request.get(f"{BASE}/api/recordings?per_page=1")
+    items = listing.json().get("recordings", []) if listing.ok else []
+
+    if not items:
+        pytest.skip('No recordings; the empty library is covered by test_main_view')
+    page.set_viewport_size({"width": 390, "height": 844})
+    try:
+        _open(page, problems, f"/recordings/{items[0]['id']}")
+        assert page.locator('.lv-mobile-title h1').inner_text().strip() == items[0]['title']
+        assert page.locator('[data-mobile-player]').is_visible()
+        assert page.locator('[data-mobile-bottom-nav]').is_visible()
+        assert page.locator('[data-mobile-bottom-nav]').inner_text().split() == ['錄音庫', '逐字稿', '人物辨識', '錄音詳情']
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        _check_common(page, problems, 'recording mobile')
+    finally:
+        page.set_viewport_size({"width": 1400, "height": 900})
+
+
+def test_login_page_and_standalone_appearance(browser_page):
+    page, _ = browser_page
+    context = page.context.browser.new_context(viewport={"width": 390, "height": 844})
+    anonymous = context.new_page()
+    problems = PageProblems(anonymous)
+    try:
+        _open(anonymous, problems, '/login')
+        assert anonymous.locator('input[name=email]').is_visible()
+        assert anonymous.locator('input[name=password]').is_visible()
+        switch = anonymous.locator('[data-static-theme-toggle]')
+        assert switch.is_visible()
+        was_dark = 'dark' in (anonymous.locator('html').get_attribute('class') or '').split()
+        switch.click()
+        anonymous.reload()
+        anonymous.wait_for_function("!document.documentElement.classList.contains('app-loading')")
+        assert ('dark' in (anonymous.locator('html').get_attribute('class') or '').split()) == (not was_dark)
+        assert anonymous.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        _check_common(anonymous, problems, 'login appearance and mobile')
+    finally:
+        context.close()
+
+
+def test_recording_rename_seek_play_and_download(browser_page):
+    if os.environ.get('SPEAKR_SMOKE_ALLOW_MUTATIONS') != '1':
+        pytest.skip('Enable only against isolated synthetic fixtures: SPEAKR_SMOKE_ALLOW_MUTATIONS=1')
+    page, problems = browser_page
+    listing = page.request.get(f"{BASE}/api/recordings?per_page=100").json()['recordings']
+    synthetic = [r for r in listing if r.get('title', '').startswith('UI smoke fixture ') and r.get('original_filename') == 'ui-smoke.wav']
+    assert synthetic, 'Refusing to modify non-fixture recordings; run seed_browser_recordings.py in an isolated test instance'
+    recording_id = synthetic[0]['id']
+    _open(page, problems, f'/recordings/{recording_id}')
+    speaker = page.locator('.lv-transcript-scroll .speaker-tablet').first
+    original = speaker.inner_text().strip()
+    replacement = original + '（介面測試）'
+    speaker.dblclick()
+    editor = page.locator('.speaker-inline-rename:visible')
+    editor.fill(replacement)
+    with page.expect_response(lambda r: r.url.endswith('/update_speakers') and r.request.method == 'POST') as saved:
+        editor.press('Enter')
+    assert saved.value.status == 200
+    assert any(s.get('speaker') == replacement for s in json.loads(saved.value.json()['recording']['transcription']))
+    renamed = page.locator('.lv-transcript-scroll .speaker-tablet').filter(has_text=replacement).first
+    renamed.wait_for(state='visible')
+    renamed.dblclick()
+    editor = page.locator('.speaker-inline-rename:visible')
+    editor.fill(original)
+    with page.expect_response(lambda r: r.url.endswith('/update_speakers') and r.request.method == 'POST') as restored:
+        editor.press('Enter')
+    assert restored.value.status == 200
+    page.locator('.speaker-inline-rename').wait_for(state='hidden')
+    segment = page.locator('.lv-transcript-scroll .speaker-segment').nth(1)
+    segment.dblclick()
+    page.wait_for_function("() => { const a = document.getElementById('mainPlayerMedia'); return a && !a.paused && a.currentTime >= 8; }")
+    page.locator('.lv-player .player-play-button').click()
+    assert page.locator('#mainPlayerMedia').evaluate('(audio) => audio.paused')
+    with page.expect_download() as exported:
+        page.locator('.tabs-bar__actions button[title*="下載"]').click()
+    download = exported.value
+    assert download.suggested_filename.endswith('.txt')
+    with open(download.path(), encoding='utf-8-sig') as stream:
+        text = stream.read()
+    assert '今天先確認一下產品的使用流程。' in text
+    _check_common(page, problems, 'recording rename, playback, and TXT export')
+
+
+def test_preferences_save_once_and_persist(browser_page):
+    if os.environ.get('SPEAKR_SMOKE_ALLOW_MUTATIONS') != '1':
+        pytest.skip('Enable only against an isolated test account')
+    page, problems = browser_page
+    _open(page, problems, '/account')
+    checkbox = page.locator('#prefEditorAutosave')
+    original = checkbox.is_checked()
+    submissions = []
+
+    def track(request):
+        if request.method == 'POST' and request.url == f'{BASE}/account':
+            submissions.append(request)
+
+    page.on('request', track)
+    try:
+        for desired in (not original, original):
+            submissions.clear()
+            checkbox.set_checked(desired)
+            with page.expect_response(lambda r: r.url == f'{BASE}/account' and r.request.method == 'POST') as saved:
+                page.locator('button[form="preferencesForm"]').click()
+            assert saved.value.status == 200
+            page.wait_for_timeout(250)
+            assert len(submissions) == 1, f'One save sent {len(submissions)} requests'
+            page.reload()
+            page.wait_for_function("!document.documentElement.classList.contains('app-loading')")
+            assert page.locator('#prefEditorAutosave').is_checked() == desired
+        _check_common(page, problems, 'preferences save and persistence')
+    finally:
+        page.remove_listener('request', track)

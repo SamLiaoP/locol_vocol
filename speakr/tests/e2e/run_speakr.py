@@ -38,6 +38,7 @@ def main():
         "AUTO_EXPORT_DIR": f"{work}/exports",
         "AUTO_PROCESS_WATCH_DIR": f"{work}/auto-process",
         "PYTHONUNBUFFERED": "1",
+        "SPEAKR_BROWSER_FIXTURES": "1",
     })
 
     def run(cmd):
@@ -45,6 +46,7 @@ def main():
 
     run([sys.executable, "-c", "from src.app import app, db; app.app_context().push(); db.create_all()"])
     run([sys.executable, "scripts/docker_create_admin.py"])
+    run([sys.executable, "tests/e2e/seed_browser_recordings.py"])
     os.execvpe(sys.executable, [sys.executable, "-m", "gunicorn", "--workers", "2", "--worker-class", "gthread",
                                 "--threads", "4", "--bind", f"{args.host}:{args.port}", "--timeout", "600",
                                 "--chdir", ROOT, "src.app:app"], env)

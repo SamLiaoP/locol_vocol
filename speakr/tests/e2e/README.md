@@ -48,3 +48,5 @@ SPEAKR_BROWSER_SMOKE=1 SPEAKR_BASE_URL=http://127.0.0.1:8899 \
 
 `--noconftest` keeps the repository's `conftest.py`, which imports the app, out of a run that only needs Playwright.
 
+
+The browser suite covers the Locol-Vocol navigation, appearance persistence, mobile layout, login, and transcript operations. `run_speakr.py` seeds two synthetic recordings in its temporary SQLite database; it never uses production data. Set `SPEAKR_SMOKE_ALLOW_MUTATIONS=1` only against this isolated instance to exercise speaker rename, seek/playback, and TXT download. The mutation test also requires reserved `UI smoke fixture` titles and `ui-smoke.wav` filenames. Other existing instances run read-only checks and skip the mutation test.

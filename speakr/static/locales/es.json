@@ -931,7 +931,10 @@
     "uploadTimedOut": "Se agotó el tiempo de subida",
     "validationError": "Error de validación",
     "waitAndRetryGuidance": "Espere unos minutos y vuelva a intentarlo",
-    "shareTarget_storage_quota": "El archivo compartido no se guardó porque su almacenamiento está lleno."
+    "shareTarget_storage_quota": "El archivo compartido no se guardó porque su almacenamiento está lleno.",
+    "creditsExhausted": "Créditos agotados",
+    "creditsExhaustedGuidance": "Recarga o mejora el plan del servicio de transcripción y vuelve a procesar esta grabación.",
+    "creditsExhaustedMessage": "La cuenta del servicio de transcripción no tiene créditos suficientes para esta grabación."
   },
   "eventExtraction": {
     "description": "Cuando está habilitado, la IA identificará reuniones, citas y plazos mencionados en tus grabaciones y creará eventos de calendario descargables.",
@@ -1597,7 +1600,8 @@
     "signOut": "Cerrar Sesión",
     "teamManagement": "Gestión de Grupos",
     "upload": "Subir",
-    "userProfile": "Perfil de Usuario"
+    "userProfile": "Perfil de Usuario",
+    "people": "Personas"
   },
   "notes": {
     "cancelEdit": "Cancelar Edición",
@@ -2203,7 +2207,14 @@
     "speaker": "Hablante {{number}}",
     "speakerLabels": "Etiquetas de Hablante",
     "title": "Transcripción",
-    "unknownSpeaker": "Hablante Desconocido"
+    "unknownSpeaker": "Hablante Desconocido",
+    "doubleClickRename": "Haz doble clic para renombrar este hablante en todas partes",
+    "doubleClickEditSegment": "Haz doble clic para editar este segmento",
+    "technicalDetails": "Detalles técnicos",
+    "speakerRenamed": "«{{from}}» se cambió a «{{to}}» en todas partes",
+    "speakerRenameFailed": "No se pudo cambiar el nombre: {{error}}",
+    "defaultSpeakerLabel": "Hablante {{n}}",
+    "doubleClickPlay": "Haz doble clic para reproducir desde este segmento"
   },
   "unifiedShareModal": {
     "noPublicLinks": "Aún no hay enlaces públicos",
@@ -2304,5 +2315,75 @@
   "usageMeters": {
     "tokenTooltip": "Tokens de IA este mes: {{used}} de {{budget}}",
     "storageTooltip": "Almacenamiento: {{used}} de {{quota}}"
+  },
+  "people": {
+    "title": "Personas",
+    "subtitle": "Todas las personas nombradas en una grabación y sus clips de referencia. Los clips se envían junto con cada nueva grabación para asignar nombres a los grupos de hablantes.",
+    "empty": "Todavía no hay personas. Haz doble clic en la etiqueta de un hablante para darle un nombre.",
+    "loading": "Cargando…",
+    "search": "Buscar nombres",
+    "count": "{{n}} personas",
+    "clips": "{{n}} clips",
+    "seconds": "{{s}} s",
+    "hits": "{{n}} coincidencias",
+    "noClips": "sin clips (no se reconocerá)",
+    "lastUsed": "Última aparición",
+    "recordings": "en {{n}} grabaciones",
+    "rename": "Renombrar",
+    "renamePrompt": "Nuevo nombre (cambia en todas las grabaciones)",
+    "renamed": "Nombre cambiado a {{name}}",
+    "merge": "Fusionar",
+    "mergeHint": "Selecciona las personas que quieras fusionar y pulsa «Fusionar con esta persona».",
+    "mergeInto": "Fusionar con esta persona",
+    "mergeConfirm": "¿Fusionar {{sources}} con {{target}}? Los nombres de todas las grabaciones y todos los clips de voz se asignarán a {{target}}.",
+    "merged": "Fusión completada; {{n}} grabaciones actualizadas",
+    "selectForMerge": "Seleccionar para fusionar",
+    "delete": "Eliminar persona",
+    "deleteConfirm": "¿Eliminar a {{name}}? También se eliminarán sus clips; los nombres de las grabaciones se conservarán.",
+    "deleted": "Eliminado",
+    "clipsTitle": "Clips de voz",
+    "clipFrom": "de «{{title}}»",
+    "clipFromDeleted": "grabación de origen eliminada",
+    "clipLabel": "antes {{label}}",
+    "clipSource_confirmed": "nombre asignado manualmente",
+    "clipSource_backfill": "creado a partir de grabaciones existentes",
+    "clipDelete": "Eliminar clip",
+    "clipDeleteConfirm": "¿Eliminar este clip? Si es el único, esta persona dejará de reconocerse automáticamente.",
+    "clipDeleted": "Clip eliminado",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "backfill": "Crear clips a partir de grabaciones existentes",
+    "backfillHint": "Busca en todas las grabaciones y crea clips de las personas con nombre que aún no tengan ninguno.",
+    "backfillDone": "Listo: {{created}} creados; {{skipped}} ya existían",
+    "openRecording": "Abrir grabación",
+    "error": "Error: {{error}}",
+    "howItWorks": "Cómo funciona",
+    "howItWorksText": "Se guardan hasta 30 segundos de voz clara por persona y grabación. Al transcribir una nueva grabación, los clips se añaden al principio y se envían juntos. Si el motor agrupa un clip y una voz de la reunión, se aplica el nombre. Si alguien no se reconoce, asígnale un nombre con un doble clic para crear un nuevo clip. Si dos personas coinciden con el mismo grupo, este se deja sin nombre."
+  },
+  "cost": {
+    "transcription": "Transcripción",
+    "summary": "Resumen",
+    "model": "Modelo",
+    "min": "min",
+    "sec": "s",
+    "balance": "Saldo estimado",
+    "spent": "Gastado",
+    "balanceNotSet": "No se ha indicado ninguna recarga. En Administración → Configuración del sistema, completa billing_topup_usd y billing_topup_date para ver el saldo estimado.",
+    "balanceTooltip": "Recarga ${{topup}} ({{date}}) − gasto registrado ${{spend}}. Es una estimación, no una factura.",
+    "chunkProgress": "{{done}} / {{total}} fragmentos completados",
+    "elapsed": "Transcurrido",
+    "remaining": "Restante",
+    "credits": "Créditos de ElevenLabs",
+    "creditsUnknown": "no disponible",
+    "creditsNoPermission": "Esta clave no tiene el permiso user_read; no se puede consultar el consumo.",
+    "creditsKeyLine": "Clave {{n}} ({{key}}): usado {{used}} / {{limit}}, restante {{remaining}}, renovación {{reset}}",
+    "creditsKeyError": "Clave {{n}} ({{key}}): {{error}}",
+    "creditsActiveMark": "  ← en uso"
+  },
+  "engine": {
+    "tooltip": "Motor de transcripción actual. El cambio se aplica inmediatamente a las nuevas cargas.",
+    "noKey": " (sin clave)",
+    "switched": "Motor de transcripción cambiado a {{name}}",
+    "switchFailed": "Error al cambiar: {{error}}"
   }
 }

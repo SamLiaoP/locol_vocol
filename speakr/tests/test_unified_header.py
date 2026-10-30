@@ -70,10 +70,9 @@ def test_pages_outside_the_main_app_mount_the_header_app_and_drop_the_old_contro
 
 def test_the_inquire_page_uses_the_shared_controls(admin_client):
     from unittest.mock import patch
-    with patch("src.app.ENABLE_INQUIRE_MODE", True):
+    with patch("src.app.ENABLE_INQUIRE_MODE", True), patch("src.api.inquire.ENABLE_INQUIRE_MODE", True):
         response = admin_client.get("/inquire")
-    if response.status_code != 200:
-        pytest.skip("Inquire mode is not available in this configuration")
+    assert response.status_code == 200
     html = response.get_data(as_text=True)
     for marker in SHARED_MARKERS:
         assert marker in html, marker

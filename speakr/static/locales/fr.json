@@ -931,7 +931,10 @@
     "uploadTimedOut": "Délai d’envoi dépassé",
     "validationError": "Erreur de validation",
     "waitAndRetryGuidance": "Patientez quelques minutes et réessayez",
-    "shareTarget_storage_quota": "Le fichier partagé n'a pas été enregistré, car votre stockage est plein."
+    "shareTarget_storage_quota": "Le fichier partagé n'a pas été enregistré, car votre stockage est plein.",
+    "creditsExhausted": "Crédits épuisés",
+    "creditsExhaustedGuidance": "Rechargez votre compte ou changez d’offre auprès du service de transcription, puis relancez le traitement de cet enregistrement.",
+    "creditsExhaustedMessage": "Le compte du service de transcription ne dispose pas d’assez de crédits pour cet enregistrement."
   },
   "eventExtraction": {
     "description": "Lorsqu'activé, l'IA identifiera les réunions, rendez-vous et échéances mentionnés dans vos enregistrements et créera des événements de calendrier téléchargeables.",
@@ -1597,7 +1600,8 @@
     "signOut": "Déconnexion",
     "teamManagement": "Gestion de Groupe",
     "upload": "Télécharger",
-    "userProfile": "Profil Utilisateur"
+    "userProfile": "Profil Utilisateur",
+    "people": "Personnes"
   },
   "notes": {
     "cancelEdit": "Annuler la Modification",
@@ -2203,7 +2207,14 @@
     "speaker": "Orateur {{number}}",
     "speakerLabels": "Étiquettes d'Orateur",
     "title": "Transcription",
-    "unknownSpeaker": "Orateur Inconnu"
+    "unknownSpeaker": "Orateur Inconnu",
+    "doubleClickRename": "Double-cliquez pour renommer ce locuteur partout",
+    "doubleClickEditSegment": "Double-cliquez pour modifier ce segment",
+    "technicalDetails": "Détails techniques",
+    "speakerRenamed": "« {{from}} » renommé en « {{to}} » partout",
+    "speakerRenameFailed": "Échec du renommage : {{error}}",
+    "defaultSpeakerLabel": "Locuteur {{n}}",
+    "doubleClickPlay": "Double-cliquez pour lire à partir de ce segment"
   },
   "unifiedShareModal": {
     "noPublicLinks": "Aucun lien public pour le moment",
@@ -2304,5 +2315,75 @@
   "usageMeters": {
     "tokenTooltip": "Tokens IA ce mois-ci : {{used}} sur {{budget}}",
     "storageTooltip": "Stockage : {{used}} sur {{quota}}"
+  },
+  "people": {
+    "title": "Personnes",
+    "subtitle": "Toutes les personnes nommées dans les enregistrements et leurs extraits vocaux de référence. Les extraits sont envoyés avec chaque nouvel enregistrement pour associer des noms aux groupes de locuteurs.",
+    "empty": "Aucune personne pour le moment. Double-cliquez sur une étiquette de locuteur pour lui donner un nom.",
+    "loading": "Chargement…",
+    "search": "Rechercher des noms",
+    "count": "{{n}} personnes",
+    "clips": "{{n}} extraits",
+    "seconds": "{{s}} s",
+    "hits": "{{n}} correspondances",
+    "noClips": "aucun extrait (pas de reconnaissance)",
+    "lastUsed": "Dernière apparition",
+    "recordings": "dans {{n}} enregistrements",
+    "rename": "Renommer",
+    "renamePrompt": "Nouveau nom (appliqué à tous les enregistrements)",
+    "renamed": "Renommé en {{name}}",
+    "merge": "Fusionner",
+    "mergeHint": "Sélectionnez les personnes à fusionner, puis cliquez sur « Fusionner avec cette personne ».",
+    "mergeInto": "Fusionner avec cette personne",
+    "mergeConfirm": "Fusionner {{sources}} avec {{target}} ? Les noms dans tous les enregistrements et tous les extraits vocaux seront associés à {{target}}.",
+    "merged": "Fusion terminée, {{n}} enregistrements mis à jour",
+    "selectForMerge": "Sélectionner pour fusionner",
+    "delete": "Supprimer la personne",
+    "deleteConfirm": "Supprimer {{name}} ? Ses extraits seront également supprimés ; les noms dans les enregistrements seront conservés.",
+    "deleted": "Supprimé",
+    "clipsTitle": "Extraits vocaux",
+    "clipFrom": "extrait de « {{title}} »",
+    "clipFromDeleted": "enregistrement source supprimé",
+    "clipLabel": "anciennement {{label}}",
+    "clipSource_confirmed": "nom attribué manuellement",
+    "clipSource_backfill": "créé depuis les enregistrements existants",
+    "clipDelete": "Supprimer l’extrait",
+    "clipDeleteConfirm": "Supprimer cet extrait ? S’il est le seul, cette personne ne sera plus reconnue automatiquement.",
+    "clipDeleted": "Extrait supprimé",
+    "play": "Lire",
+    "pause": "Pause",
+    "backfill": "Créer des extraits depuis les enregistrements existants",
+    "backfillHint": "Parcourir tous les enregistrements et créer des extraits pour les personnes nommées qui n’en ont pas encore.",
+    "backfillDone": "Terminé : {{created}} créés, {{skipped}} déjà présents",
+    "openRecording": "Ouvrir l’enregistrement",
+    "error": "Échec : {{error}}",
+    "howItWorks": "Fonctionnement",
+    "howItWorksText": "Jusqu’à 30 secondes de parole claire sont conservées par personne et par enregistrement. Lors d’une nouvelle transcription, les extraits sont placés avant l’audio et envoyés ensemble. Si le moteur associe un extrait et une voix au même groupe, le nom est appliqué. Si une personne n’est pas reconnue, nommez-la par double-clic pour créer un nouvel extrait. Si deux personnes correspondent au même groupe, celui-ci reste sans nom."
+  },
+  "cost": {
+    "transcription": "Transcription",
+    "summary": "Résumé",
+    "model": "Modèle",
+    "min": "min",
+    "sec": "s",
+    "balance": "Solde estimé",
+    "spent": "Dépenses",
+    "balanceNotSet": "Aucune recharge renseignée. Dans Administration → Paramètres système, remplissez billing_topup_usd et billing_topup_date pour afficher le solde estimé.",
+    "balanceTooltip": "Recharge ${{topup}} ({{date}}) − dépenses enregistrées ${{spend}}. Estimation, pas une facture.",
+    "chunkProgress": "{{done}} / {{total}} segments terminés",
+    "elapsed": "Écoulé",
+    "remaining": "Restant",
+    "credits": "Crédits ElevenLabs",
+    "creditsUnknown": "indisponible",
+    "creditsNoPermission": "Cette clé ne dispose pas de l’autorisation user_read ; la consommation ne peut pas être consultée.",
+    "creditsKeyLine": "Clé {{n}} ({{key}}) : utilisés {{used}} / {{limit}}, restants {{remaining}}, réinitialisation {{reset}}",
+    "creditsKeyError": "Clé {{n}} ({{key}}) : {{error}}",
+    "creditsActiveMark": "  ← utilisée"
+  },
+  "engine": {
+    "tooltip": "Moteur de transcription actuel. Le changement s’applique immédiatement aux nouveaux téléversements.",
+    "noKey": " (sans clé)",
+    "switched": "Moteur de transcription remplacé par {{name}}",
+    "switchFailed": "Échec du changement : {{error}}"
   }
 }
