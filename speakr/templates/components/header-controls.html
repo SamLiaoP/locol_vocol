@@ -4,7 +4,6 @@
     page-header.html, which provides the same state and methods, so every
     page shows the same header. Vue delimiters are ${ }. -#}
     {% include 'components/token_budget_indicator.html' %}
-    {% include 'components/appearance-toggle.html' %}
 
     <!-- Inquire / Install PWA / New Recording header buttons.
          All three use the .btn .btn--sm primitive so their height
@@ -183,7 +182,7 @@
                     <i class="fas fa-circle-half-stroke mr-2 w-4 text-center"></i>
                     <span v-text="isDarkMode ? t('nav.darkMode') : t('nav.lightMode')"></span>
                 </span>
-                <button @click.stop="toggleDarkMode"
+                <button type="button" data-menu-theme-toggle @click.stop="toggleDarkMode"
                         class="flex items-center rounded-full border border-[var(--border-secondary)] bg-[var(--bg-secondary)] p-0.5 ml-3 flex-shrink-0"
                         :title="isDarkMode ? t('nav.lightMode') : t('nav.darkMode')">
                     <span :class="!isDarkMode ? 'bg-[var(--bg-accent)] text-[var(--text-accent)]' : 'text-[var(--text-muted)]'"

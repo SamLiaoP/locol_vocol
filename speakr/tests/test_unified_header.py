@@ -26,7 +26,7 @@ from src.models import User
 app.config["WTF_CSRF_ENABLED"] = False
 
 # Markers only the shared template has.
-SHARED_MARKERS = ('data-notifications-toggle', '/people', '/account', '/references', 'toggleDarkMode', 'switchToUploadView', 'data-theme-toggle')
+SHARED_MARKERS = ('data-notifications-toggle', '/people', '/account', '/references', 'toggleDarkMode', 'switchToUploadView', 'data-menu-theme-toggle')
 
 
 class _Client(FlaskClient):
@@ -58,6 +58,7 @@ def test_each_page_renders_the_shared_header_controls(admin_client, path):
         assert marker in html, (path, marker)
     buttons = re.findall(r'<button[^>]*data-user-menu-toggle', html)
     assert len(buttons) == 1, (path, len(buttons))
+    assert 'data-theme-toggle' not in html
 
 
 @pytest.mark.parametrize("path", ["/account", "/admin"])

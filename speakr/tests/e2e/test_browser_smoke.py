@@ -247,7 +247,9 @@ def test_product_pages(browser_page, path):
 def test_appearance_switch_survives_reload(browser_page, path):
     page, problems = browser_page
     _open(page, problems, path)
-    toggle = page.locator('[data-theme-toggle], [data-static-theme-toggle]').first
+    assert page.locator('[data-theme-toggle]').count() == 0
+    page.locator('[data-user-menu-toggle]').click()
+    toggle = page.locator('[data-menu-theme-toggle]')
     assert toggle.count() == 1
     original = page.locator('html').get_attribute('class') or ''
     was_dark = 'dark' in original.split()
@@ -261,7 +263,8 @@ def test_appearance_switch_survives_reload(browser_page, path):
     # The selected appearance also follows navigation to another page.
     page.goto(f"{BASE}/references")
     assert ('dark' in (page.locator('html').get_attribute('class') or '').split()) == (not was_dark)
-    page.locator('[data-theme-toggle], [data-static-theme-toggle]').first.click()
+    page.locator('[data-user-menu-toggle]').click()
+    page.locator('[data-menu-theme-toggle]').click()
     page.wait_for_function("expected => document.documentElement.classList.contains('dark') === expected", arg=was_dark)
     _check_common(page, problems, path + ' appearance')
 
@@ -273,7 +276,9 @@ def test_mobile_pages_fit_the_viewport(browser_page, path):
     try:
         _open(page, problems, path)
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-        switch = page.locator('[data-theme-toggle], [data-static-theme-toggle]').first
+        assert page.locator('[data-theme-toggle]').count() == 0
+        page.locator('[data-user-menu-toggle]').click()
+        switch = page.locator('[data-menu-theme-toggle]')
         assert switch.is_visible()
         assert page.locator('[data-recordings-toggle]').is_visible()
         for content in page.frames[1:]:
