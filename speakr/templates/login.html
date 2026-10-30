@@ -53,12 +53,12 @@
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-2') }}">
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)]">
     <div class="lv-login">
         <header class="lv-login-header">
-            {% include 'components/wordmark.html' %}
+            <div class="lv-login-controls"><a href="/?home=1&sidebar=1" data-recordings-toggle class="btn btn--icon" aria-label="登入查看錄音紀錄"><i class="fas fa-bars" aria-hidden="true"></i></a>{% include 'components/wordmark.html' %}</div>
             <div class="lv-login-controls"><span class="lv-local-label">你的對話工作台</span>{% with static_theme_toggle=true %}{% include 'components/appearance-toggle.html' %}{% endwith %}</div>
         </header>
         <main class="lv-login-main">

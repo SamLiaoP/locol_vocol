@@ -3,7 +3,7 @@
 // own cache namespace, so the activate handler below clears the previous
 // release's app shell instead of serving it forever (issue #357).
 const APP_VERSION = new URLSearchParams(self.location.search).get('v') || 'v5';
-const CACHE_NAME = `Locol-Vocol-cache-${APP_VERSION}-orange-20261030-1`;
+const CACHE_NAME = `Locol-Vocol-cache-${APP_VERSION}-workspace-20261030-2`;
 const ASSETS_TO_CACHE = [
   '/',
   '/static/offline.html',

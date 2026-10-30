@@ -62,7 +62,7 @@ def test_each_page_renders_the_shared_header_controls(admin_client, path):
 
 @pytest.mark.parametrize("path", ["/account", "/admin"])
 def test_pages_outside_the_main_app_mount_the_header_app_and_drop_the_old_controls(admin_client, path):
-    html = admin_client.get(path).get_data(as_text=True)
+    html = admin_client.get(path + "?embedded=1").get_data(as_text=True)
     assert 'id="global-header"' in html
     assert 'js/global-header.js' in html
     assert 'id="darkModeToggle"' not in html and 'id="userDropdownButton"' not in html
@@ -81,7 +81,7 @@ def test_the_inquire_page_uses_the_shared_controls(admin_client):
 def test_the_page_label_has_no_fallback_text_inside_v_text(admin_client):
     """Vue refuses to compile an element with both v-text and children, and
     the header app then renders nothing."""
-    html = admin_client.get("/account").get_data(as_text=True)
+    html = admin_client.get("/account?embedded=1").get_data(as_text=True)
     assert "v-text=\"t('nav.account')\"></span>" in html
 
 
@@ -120,3 +120,27 @@ def test_standalone_pages_offer_an_accessible_appearance_switch(path):
     assert 'data-static-theme-toggle' in html
     assert 'aria-label="切換明亮或深色模式"' in html
     assert '/static/js/appearance-toggle.js' in html
+
+
+@pytest.mark.parametrize("path", ["/people", "/account", "/admin", "/references"])
+def test_logged_in_pages_keep_recording_library_in_the_workspace(admin_client, path):
+    response = admin_client.get(path)
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'data-recordings-toggle' in html
+    assert 'lv-workspace-frame' in html
+    assert 'data-workspace-link="recordings"' in html
+    embedded = admin_client.get(path + '?embedded=1').get_data(as_text=True)
+    assert 'js/workspace-page.js' in embedded
+    assert 'lv-workspace-frame' not in embedded
+
+
+def test_embedding_does_not_bypass_authentication():
+    client = app.test_client()
+    for path in ('/people', '/account', '/admin', '/group-management'):
+        assert client.get(path + '?embedded=1').status_code == 302
+
+
+def test_group_management_keeps_existing_permission_gate(admin_client):
+    assert admin_client.get('/group-management').status_code == 302
+    assert admin_client.get('/group-management?embedded=1').status_code == 302

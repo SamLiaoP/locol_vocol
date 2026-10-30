@@ -11,6 +11,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
+from src.utils.workspace import render_workspace_page
 from src.database import db
 from src.models import *
 from src.utils import *
@@ -509,4 +510,4 @@ def check_deletion_permission():
 @system_bp.route('/references', methods=['GET'])
 def references():
     """Project provenance and upstream attribution, separate from the product brand."""
-    return render_template('references.html')
+    return render_workspace_page('references.html')

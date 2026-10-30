@@ -1,7 +1,8 @@
 const { createApp, ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
 
 // Import composables
-import { useRecordings } from './modules/composables/recordings.js';
+import { useWorkspace } from './modules/composables/workspace.js';
+import { useRecordings } from './modules/composables/recordings.js?v=workspace-2';
 import { useUpload } from './modules/composables/upload.js';
 import { useAudio } from './modules/composables/audio.js';
 import { useUI } from './modules/composables/ui.js';
@@ -2734,6 +2735,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             // prompt fires on every subsequent navigation.
             utils.discardActiveRecording = audioComposable.discardRecording;
             const uiComposable = useUI(state, utils, processedTranscription);
+            const workspace = useWorkspace({ ref, computed, watch, onMounted, onUnmounted }, {
+                currentView, selectedRecording, isRecording, audioBlobURL, showUploadModal, isUserMenuOpen,
+                isSidebarCollapsed, showTimestampsSimpleView, editorAutosave, audioPlayerPosition
+            }, {
+                showToast,
+                pausePlayback: () => document.querySelector('#mainPlayerMedia, [data-mobile-player] audio, [data-mobile-player] video')?.pause(),
+                selectRecording: recording => recordingsComposable.selectRecording(recording),
+                switchToUploadView: () => uiComposable.switchToUploadView(),
+                set onRecordingSelected(handler) { utils.onRecordingSelected = handler; }
+            });
             const modalsComposable = useModals(state, utils);
             const sharingComposable = useSharing(state, utils);
             const transcriptionComposable = useTranscription(state, utils);
@@ -3810,7 +3821,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Incognito (id 'incognito') is not a number, so it maps to '/'.
             const syncAddressBar = () => {
                 try {
+                    if (workspace.workspacePage.value !== 'recordings') return;
                     const rec = selectedRecording.value;
+                    if (!rec && new URLSearchParams(window.location.search).get('home') === '1') return;
                     const path = (rec && typeof rec.id === 'number')
                         ? `/recordings/${rec.id}`
                         : (labelPathForFilter(filterTags.value, availableTags.value) || '/');
@@ -4082,6 +4095,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 uiComposable.initializeDarkMode();
                 uiComposable.initializeColorScheme();
                 uiComposable.initializeSidebar();
+                if (new URLSearchParams(window.location.search).get('sidebar') === '1') isSidebarCollapsed.value = false;
                 // Start the notification badge poll. Cheap and slow; see the
                 // composable for why this is polled rather than pushed.
                 notificationsComposable.startNotificationPolling();
@@ -4613,6 +4627,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             // RETURN ALL STATE AND METHODS
             // =========================================================================
             return {
+                // Persistent workspace navigation
+                ...workspace,
                 // Translation
                 t, tc,
 

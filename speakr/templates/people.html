@@ -30,7 +30,8 @@
                  padding: .6rem 1rem; border-radius: .6rem; box-shadow: 0 6px 24px rgba(0,0,0,.25); font-size: .9rem; }
         .toast.is-error { border-color: var(--border-danger); color: var(--text-danger-strong); }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-2') }}">
+    {% if embedded_page|default(false) %}<script src="{{ url_for('static', filename='js/workspace-page.js', v='workspace-2') }}" defer></script>{% endif %}
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-full flex flex-col overflow-hidden">
     {% set page_label = '人物' %}

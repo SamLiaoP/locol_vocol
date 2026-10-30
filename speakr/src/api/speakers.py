@@ -12,6 +12,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
+from src.utils.workspace import render_workspace_page
 from src.database import db
 from src.models import *
 from src.utils import *
@@ -252,7 +253,7 @@ def delete_all_speakers():
 @login_required
 def people_page():
     """The people recognised by voice: their clips, renaming and merging."""
-    return render_template('people.html', title='People',
+    return render_workspace_page('people.html', title='People',
                            user_language=current_user.ui_language or 'zh')
 
 

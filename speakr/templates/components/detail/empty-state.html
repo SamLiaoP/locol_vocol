@@ -8,7 +8,6 @@
             <ul class="lv-workspace-features" aria-label="工作台功能"><li>繁體中文逐字稿</li><li>說話者辨識</li><li>同步播放</li></ul>
             <div class="lv-hero-actions">
                 <button @click="switchToUploadView" class="btn btn--primary lv-primary-action"><i class="fas fa-plus" aria-hidden="true"></i> 新增錄音 <span aria-hidden="true">↗</span></button>
-                <a href="/people" class="lv-text-link">管理人物 <span aria-hidden="true">→</span></a>
             </div>
             <p v-if="recordings && recordings.length" class="lv-returning">${ t('emptyState.selectBody') }</p>
         </div>
@@ -24,17 +23,14 @@
 
     <section class="lv-start-panel" aria-labelledby="lv-start-title">
         <div class="lv-section-head"><div><p class="lv-eyebrow">01 / WORKSPACE</p><h3 id="lv-start-title">從一段對話開始</h3></div><span class="lv-badge">中英轉錄 · 自動分人</span></div>
-        <div class="lv-start-grid">
+        <div class="lv-start-grid lv-start-grid--single">
             <button @click="switchToUploadView" class="lv-start-card">
                 <span class="lv-card-icon"><i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i></span>
                 <span class="lv-card-text"><strong>帶入你的錄音</strong><span>上傳音訊或影片，開始整理逐字稿。</span><small>MP3 / M4A / WAV / MP4</small></span><span class="lv-card-arrow" aria-hidden="true">↗</span>
             </button>
-            <a href="/people" class="lv-start-card">
-                <span class="lv-card-icon lv-card-icon--people"><i class="fas fa-user-group" aria-hidden="true"></i></span>
-                <span class="lv-card-text"><strong>讓聲音對上名字</strong><span>建立人物語音片段，讓下次辨識更熟悉。</span><small>VOICE LIBRARY</small></span><span class="lv-card-arrow" aria-hidden="true">↗</span>
-            </a>
+
         </div>
         <div class="lv-process"><span><b>01</b> 上傳或錄製</span><i aria-hidden="true">→</i><span><b>02</b> 轉錄與分人</span><i aria-hidden="true">→</i><span><b>03</b> 聆聽、編輯、匯出</span></div>
     </section>
-    <footer class="lv-footer"><span>LOCOL / VOCOL — 留住對話裡的每個細節。</span><a href="/references">參考與致謝 ↗</a></footer>
+    <footer class="lv-footer"><span>LOCOL / VOCOL — 留住對話裡的每個細節。</span><a href="/references" @click="navigateWorkspaceLink($event, 'references')">參考與致謝 ↗</a></footer>
 </div>

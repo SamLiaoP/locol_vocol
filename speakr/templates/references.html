@@ -10,11 +10,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css', v='orange-20261030-1') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/primitives.css', v='orange-20261030-1') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-2') }}">
+    {% if embedded_page|default(false) %}<script src="{{ url_for('static', filename='js/workspace-page.js', v='workspace-2') }}" defer></script>{% endif %}
 </head>
 <body class="lv-credits bg-[var(--bg-primary)] text-[var(--text-primary)]">
     <header class="lv-header flex items-center justify-between border-b border-[var(--border-primary)]">
-        {% include 'components/wordmark.html' %}
+        <div class="lv-login-controls"><a href="/?home=1&sidebar=1" data-recordings-toggle class="btn btn--icon" aria-label="錄音紀錄">☰</a>{% include 'components/wordmark.html' %}</div>
         <div class="lv-login-controls">{% include 'components/workspace-nav.html' %}{% with static_theme_toggle=true %}{% include 'components/appearance-toggle.html' %}{% endwith %}</div>
     </header>
     <main class="lv-credits-main">

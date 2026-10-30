@@ -467,7 +467,8 @@
          own stylesheets in the cascade. -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
     <script src="{{ url_for('static', filename='js/timezone-sync.js') }}" defer></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-2') }}">
+    {% if embedded_page|default(false) %}<script src="{{ url_for('static', filename='js/workspace-page.js', v='workspace-2') }}" defer></script>{% endif %}
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-full flex flex-col overflow-hidden">
     {% set page_label = 'Account' %}
@@ -2205,20 +2206,15 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
                             <!-- Project Links -->
                             <div class="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg p-5">
                                 <h3 class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-4" data-i18n="aboutPage.projectLinks">Project Links</h3>
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                    <a href="https://github.com/murtaza-nasir/speakr" target="_blank" rel="noopener noreferrer"
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <a href="https://github.com/SamLiaoP/locol_vocol" target="_blank" rel="noopener noreferrer"
                                        class="flex items-center gap-2 px-3 py-2 border border-[var(--border-secondary)] rounded-md hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-accent)] transition-colors text-sm">
                                         <i class="fab fa-github text-base text-[var(--text-secondary)]"></i>
                                         <span class="flex-1 text-[var(--text-primary)]" data-i18n="aboutPage.githubRepository">GitHub Repository</span>
                                         <i class="fas fa-external-link-alt text-xs text-[var(--text-muted)]"></i>
                                     </a>
-                                    <a href="https://hub.docker.com/r/learnedmachine/speakr" target="_blank" rel="noopener noreferrer"
-                                       class="flex items-center gap-2 px-3 py-2 border border-[var(--border-secondary)] rounded-md hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-accent)] transition-colors text-sm">
-                                        <i class="fab fa-docker text-base text-[var(--text-secondary)]"></i>
-                                        <span class="flex-1 text-[var(--text-primary)]" data-i18n="aboutPage.dockerHub">Docker Hub</span>
-                                        <i class="fas fa-external-link-alt text-xs text-[var(--text-muted)]"></i>
-                                    </a>
-                                    <a href="https://murtaza-nasir.github.io/speakr" target="_blank" rel="noopener noreferrer"
+
+                                    <a href="https://github.com/SamLiaoP/locol_vocol#readme" target="_blank" rel="noopener noreferrer"
                                        class="flex items-center gap-2 px-3 py-2 border border-[var(--border-secondary)] rounded-md hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-accent)] transition-colors text-sm">
                                         <i class="fas fa-book text-base text-[var(--text-secondary)]"></i>
                                         <span class="flex-1 text-[var(--text-primary)]" data-i18n="aboutPage.documentation">Documentation</span>
@@ -4393,6 +4389,14 @@ curl "https://your-speakr-instance.com/api/recordings?token=YOUR_TOKEN_HERE"</co
                             throw new Error(`HTTP ${response.status}`);
                         }
                         showToast(t(formId === 'accountInfoForm' ? 'messages.profileUpdated' : 'messages.settingsSaved'), 'success');
+                        if (formId === 'preferencesForm' && window.parent !== window) {
+                            window.parent.postMessage({ type: 'locol:preferences',
+                                showTimestamps: fd.has('show_timestamps_simple_view'),
+                                editorAutosave: fd.has('editor_autosave'),
+                                audioPlayerPosition: fd.get('audio_player_position') || 'bottom',
+                                language: fd.get('ui_language')
+                            }, window.location.origin);
+                        }
                     } catch (err) {
                         console.error('[settings save]', err);
                         // Network failure: fall back to a real submit

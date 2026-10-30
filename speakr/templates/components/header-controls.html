@@ -13,7 +13,7 @@
          = primary-success, New Recording = primary). -->
     <!-- Inquire Mode Button -->
     {% if inquire_mode_enabled %}
-    <a href="/inquire" class="btn btn--sm header-action" style="background: var(--bg-accent); color: var(--text-accent); border-color: transparent;">
+    <a href="/inquire" {% if workspace_shell|default(false) %}@click="navigateWorkspaceLink($event, 'inquire')"{% endif %} class="btn btn--sm header-action" style="background: var(--bg-accent); color: var(--text-accent); border-color: transparent;">
         <i class="fas fa-search"></i>
         <span class="hidden sm:inline" v-text="t('inquire.title')"></span>
     </a>
@@ -137,10 +137,10 @@
             </div>
 
             <!-- locol_vocol: people recognised by voice (reference clips) -->
-            <a href="/people" class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
+            <a href="/people" {% if workspace_shell|default(false) %}@click="navigateWorkspaceLink($event, 'people'); isUserMenuOpen = false"{% endif %} class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
                 <i class="fas fa-user-group mr-2 w-4 text-center"></i><span v-text="t('nav.people')"></span>
             </a>
-            <a href="/account" class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
+            <a href="/account" {% if workspace_shell|default(false) %}@click="navigateWorkspaceLink($event, 'account'); isUserMenuOpen = false"{% endif %} class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
                 <i class="fas fa-cog mr-2 w-4 text-center"></i><span v-text="t('nav.settings')"></span>
             </a>
             {% if false %}
@@ -150,14 +150,14 @@
 {% endif %}
             {% if current_user.is_admin %}
             {% if false %}
-<a href="/admin" class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
+<a href="/admin" {% if workspace_shell|default(false) %}@click="navigateWorkspaceLink($event, 'admin')"{% endif %} class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
                 <i class="fas fa-user-shield mr-2 w-4 text-center"></i>
                 <span v-text="t('admin.title')"></span>
             </a>
 {% endif %}
             {% elif is_group_admin %}
             {% if false %}
-<a href="/group-management" class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
+<a href="/group-management" {% if workspace_shell|default(false) %}@click="navigateWorkspaceLink($event, 'groups')"{% endif %} class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors">
                 <i class="fas fa-users-cog mr-2 w-4 text-center"></i>
                 <span v-text="t('nav.groupManagement')"></span>
             </a>
@@ -175,7 +175,7 @@
             </a>
             {% endif %}
             <div class="border-t border-[var(--border-primary)] my-1"></div>
-            <a href="/references" class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors"><i class="fas fa-book-open mr-2 w-4 text-center" aria-hidden="true"></i><span>參考與致謝</span></a>
+            <a href="/references" {% if workspace_shell|default(false) %}@click="navigateWorkspaceLink($event, 'references'); isUserMenuOpen = false"{% endif %} class="block px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors"><i class="fas fa-book-open mr-2 w-4 text-center" aria-hidden="true"></i><span>參考與致謝</span></a>
             <!-- locol_vocol: appearance row is only the light/dark toggle -->
             <div @click.stop="toggleDarkMode"
                  class="w-full text-left px-4 py-2 hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-between cursor-pointer">

@@ -88,6 +88,10 @@ async function mountGlobalHeader() {
                 tokenBudget,
                 isDarkMode,
                 toggleDarkMode,
+                openRecordingsSidebar: () => {
+                    if (window.parent !== window) window.parent.postMessage({ type: 'locol:sidebar' }, window.location.origin);
+                    else openInMainApp('home=1&sidebar=1');
+                },
                 switchToUploadView: () => openInMainApp('upload=1'),
                 openSharesList: () => openInMainApp('open=shares'),
                 openColorSchemeModal: () => openInMainApp('open=appearance'),

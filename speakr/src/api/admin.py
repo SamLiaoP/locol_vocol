@@ -12,6 +12,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
+from src.utils.workspace import render_workspace_page
 from src.database import db
 from src.models import *
 from src.utils import *
@@ -71,7 +72,7 @@ def admin():
 
     # Full admins only get here
     user_language = current_user.ui_language if current_user.is_authenticated and current_user.ui_language else 'en'
-    return render_template('admin.html',
+    return render_workspace_page('admin.html',
                          title='Admin Dashboard',
                          inquire_mode_enabled=ENABLE_INQUIRE_MODE,
                          global_retention_days=GLOBAL_RETENTION_DAYS,
@@ -98,7 +99,7 @@ def group_management():
         return redirect(url_for('admin.admin'))
 
     user_language = current_user.ui_language if current_user.is_authenticated and current_user.ui_language else 'en'
-    return render_template('group-admin.html',
+    return render_workspace_page('group-admin.html',
                          title='Group Management',
                          global_retention_days=GLOBAL_RETENTION_DAYS,
                          user_language=user_language)

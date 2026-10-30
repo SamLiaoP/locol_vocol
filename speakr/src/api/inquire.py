@@ -14,6 +14,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
+from src.utils.workspace import render_workspace_page
 from src.database import db
 from src.models import *
 from src.utils import *
@@ -65,7 +66,7 @@ def inquire():
     # The interface language, as on the other pages (it was missing here, so
     # Inquire always appeared in the browser language).
     user_language = current_user.ui_language or 'en'
-    return render_template('inquire.html',
+    return render_workspace_page('inquire.html',
                          use_asr_endpoint=USE_ASR_ENDPOINT,
                          current_user=current_user,
                          is_team_admin=is_team_admin,

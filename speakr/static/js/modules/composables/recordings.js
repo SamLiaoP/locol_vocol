@@ -3,6 +3,7 @@
  * Handles loading, selecting, filtering, and managing recordings
  */
 
+import { workspacePageFromPath } from '../utils/workspace-routes.js';
 import * as IncognitoStorage from '../db/incognito-storage.js';
 import { matchTagsByLabelName } from '../utils/label-links.js';
 
@@ -105,7 +106,8 @@ export function useRecordings(state, utils, reprocessComposable) {
                 // The product wordmark opens the overview explicitly, even
                 // when a previous recording is remembered in this browser.
                 const wantsOverview = typeof window !== 'undefined'
-                    && new URLSearchParams(window.location?.search || '').get('home') === '1';
+                    && (new URLSearchParams(window.location?.search || '').get('home') === '1'
+                        || workspacePageFromPath(window.location?.pathname) !== 'recordings');
                 if (labelDeepLinkPending && labelDeepLinkPending.value) {
                     labelDeepLinkPending.value = false;
                 } else if (!wantsOverview) {
@@ -248,6 +250,7 @@ export function useRecordings(state, utils, reprocessComposable) {
         // request on every normal selection). Set BEFORE the assignment so the
         // watcher, which fires on the next tick, sees the flag.
         if (recording && recording.id && utils) utils._hydratingSelectedRecording = true;
+        utils.onRecordingSelected?.(recording);
         selectedRecording.value = recording;
 
         if (recording && recording.id) {

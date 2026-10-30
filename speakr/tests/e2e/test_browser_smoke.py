@@ -129,7 +129,7 @@ def _open(page, problems, path):
 
 
 def _check_common(page, problems, path):
-    body = page.inner_text("body")
+    body = "\n".join(frame.inner_text("body") for frame in page.frames)
     leftovers = [m for m in ("${", "{{") if m in body]
     assert not leftovers, f"{path}: template text left in the page: {leftovers}"
     assert not problems.failed, f"{path}: failed requests: {problems.failed}"
@@ -182,15 +182,14 @@ def test_settings_pages(browser_page, path):
     page, problems = browser_page
     response = _open(page, problems, path)
     assert response is not None and response.status == 200, f"{path}: HTTP {response and response.status}"
-    header = page.locator("#global-header")
+    header = page.locator("#app header").first
     assert header.count() == 1, f"{path}: no shared page header"
-    assert header.get_attribute("data-v-app") is not None, f"{path}: the page header did not mount"
-    label = header.locator(".sr-only").first.inner_text().strip()
-    assert label, f"{path}: the page label in the header is empty"
-    _check_header_translated(page, path, "#global-header")
+    assert page.locator("#app[data-v-app]").count() == 1, f"{path}: the workspace did not mount"
+    assert header.locator("[data-recordings-toggle]").is_visible()
+    _check_header_translated(page, path, "#app header")
     _check_user_menu(page, path)
     if path == "/account":
-        tabs = page.locator(".tabs button:visible, .tabs a:visible")
+        tabs = page.frame_locator(".lv-workspace-frame").locator(".tabs button:visible, .tabs a:visible")
         assert tabs.count() == 2, "/account: the tab strip did not render"
     _check_common(page, problems, path)
 
@@ -205,8 +204,8 @@ def test_inquire_page(browser_page):
         _check_common(page, problems, '/inquire (disabled redirect)')
         return
     problems.failed[:] = [f for f in problems.failed if "/inquire " not in f]
-    assert page.locator("#inquire-app[data-v-app]").count() == 1, "/inquire: the app did not mount"
-    _check_header_translated(page, "/inquire", "#inquire-app header")
+    assert page.frame_locator(".lv-workspace-frame").locator("#inquire-app[data-v-app]").count() == 1, "/inquire: the app did not mount"
+    _check_header_translated(page, "/inquire", "#app header")
     _check_user_menu(page, "/inquire")
     _check_common(page, problems, "/inquire")
 
@@ -240,7 +239,7 @@ def test_product_pages(browser_page, path):
     page, problems = browser_page
     response = _open(page, problems, path)
     assert response is not None and response.status == 200
-    assert page.locator('h1:visible, h2:visible').count() >= 1
+    assert page.frame_locator('.lv-workspace-frame').locator('h1:visible, h2:visible').count() >= 1
     _check_common(page, problems, path)
 
 
@@ -254,13 +253,15 @@ def test_appearance_switch_survives_reload(browser_page, path):
     was_dark = 'dark' in original.split()
     toggle.click()
     page.wait_for_function("expected => document.documentElement.classList.contains('dark') === expected", arg=not was_dark)
+    for content in page.frames[1:]:
+        content.wait_for_function("expected => document.documentElement.classList.contains('dark') === expected", arg=not was_dark)
     page.reload()
     page.wait_for_function("!document.documentElement.classList.contains('app-loading')")
     assert ('dark' in (page.locator('html').get_attribute('class') or '').split()) == (not was_dark)
     # The selected appearance also follows navigation to another page.
     page.goto(f"{BASE}/references")
     assert ('dark' in (page.locator('html').get_attribute('class') or '').split()) == (not was_dark)
-    page.locator('[data-static-theme-toggle]').click()
+    page.locator('[data-theme-toggle], [data-static-theme-toggle]').first.click()
     page.wait_for_function("expected => document.documentElement.classList.contains('dark') === expected", arg=was_dark)
     _check_common(page, problems, path + ' appearance')
 
@@ -274,6 +275,9 @@ def test_mobile_pages_fit_the_viewport(browser_page, path):
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         switch = page.locator('[data-theme-toggle], [data-static-theme-toggle]').first
         assert switch.is_visible()
+        assert page.locator('[data-recordings-toggle]').is_visible()
+        for content in page.frames[1:]:
+            assert content.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         bounds = switch.bounding_box()
         assert bounds and bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= 390
         _check_common(page, problems, path + ' mobile')
@@ -371,7 +375,7 @@ def test_preferences_save_once_and_persist(browser_page):
         pytest.skip('Enable only against an isolated test account')
     page, problems = browser_page
     _open(page, problems, '/account')
-    checkbox = page.locator('#prefEditorAutosave')
+    checkbox = page.frame_locator('.lv-workspace-frame').locator('#prefEditorAutosave')
     original = checkbox.is_checked()
     submissions = []
 
@@ -385,13 +389,80 @@ def test_preferences_save_once_and_persist(browser_page):
             submissions.clear()
             checkbox.set_checked(desired)
             with page.expect_response(lambda r: r.url == f'{BASE}/account' and r.request.method == 'POST') as saved:
-                page.locator('button[form="preferencesForm"]').click()
+                page.frame_locator('.lv-workspace-frame').locator('button[form="preferencesForm"]').click()
             assert saved.value.status == 200
             page.wait_for_timeout(250)
             assert len(submissions) == 1, f'One save sent {len(submissions)} requests'
             page.reload()
             page.wait_for_function("!document.documentElement.classList.contains('app-loading')")
-            assert page.locator('#prefEditorAutosave').is_checked() == desired
+            assert checkbox.is_checked() == desired
         _check_common(page, problems, 'preferences save and persistence')
     finally:
         page.remove_listener('request', track)
+
+
+def test_workspace_navigation_keeps_header_and_document(browser_page):
+    page, problems = browser_page
+    _open(page, problems, '/?home=1')
+    navigations = []
+    def track(request):
+        if request.is_navigation_request() and request.frame == page.main_frame:
+            navigations.append(request.url)
+    page.on('request', track)
+    try:
+        assert page.locator('[data-workspace-link]').count() == 3
+        assert page.locator('[data-recording-capture]:visible').count() == 0
+        assert page.locator('.lv-hero').bounding_box()['y'] < 200
+        assert page.locator('.lv-start-card:visible').count() == 1
+        assert '帶入你的錄音' in page.locator('.lv-start-card').inner_text()
+        assert '聲音對上名字' not in page.inner_text('body')
+        for target in ('people', 'account', 'recordings'):
+            page.locator(f'[data-workspace-link="{target}"]').click()
+            page.wait_for_url(f'{BASE}/?home=1' if target == 'recordings' else f'{BASE}/{target}')
+            assert page.locator('[data-recordings-toggle]').is_visible()
+            if target != 'recordings':
+                frame = page.frame_locator('.lv-workspace-frame')
+                frame.locator('html.lv-embedded').wait_for()
+                assert frame.locator('body > header:visible, body > #global-header:visible').count() == 0
+                assert page.locator('.lv-workspace-frame').bounding_box()['height'] > 500
+        assert not navigations, f'Top-level document was reloaded: {navigations}'
+        page.go_back()
+        page.wait_for_url(f'{BASE}/account')
+        assert page.frame_locator('.lv-workspace-frame').locator('#prefEditorAutosave').is_visible()
+        page.go_forward()
+        page.wait_for_url(f'{BASE}/?home=1')
+        page.locator('.lv-workspace-frame').wait_for(state='detached')
+        _check_common(page, problems, 'seamless workspace navigation')
+    finally:
+        page.remove_listener('request', track)
+
+
+def test_library_opens_recording_from_settings(browser_page):
+    page, problems = browser_page
+    _open(page, problems, '/account')
+    toggle = page.locator('[data-recordings-toggle]')
+    # Toggle twice: both collapse and restore must remain available on settings.
+    toggle.click()
+    toggle.click()
+    listing = page.request.get(f'{BASE}/api/recordings?per_page=1').json()['recordings']
+    assert listing
+    page.locator('aside').get_by_text(listing[0]['title'], exact=True).first.click()
+    page.wait_for_url(f"{BASE}/recordings/{listing[0]['id']}")
+    assert page.locator('.lv-workspace-frame').count() == 0
+    assert page.locator('[data-recordings-toggle]').is_visible()
+    _check_common(page, problems, 'select recording from settings')
+
+
+def test_about_links_and_credits(browser_page):
+    page, problems = browser_page
+    _open(page, problems, '/account')
+    frame = page.frame_locator('.lv-workspace-frame')
+    assert frame.locator('a[href="https://github.com/SamLiaoP/locol_vocol"]').count() >= 1
+    assert frame.locator('a[href="https://github.com/SamLiaoP/locol_vocol#readme"]').count() >= 1
+    assert frame.locator('a[href*="hub.docker.com"]').count() == 0
+    page.locator('[data-user-menu-toggle]').click()
+    page.locator('[data-user-menu-dropdown] a[href="/references"]').click()
+    page.wait_for_url(f'{BASE}/references')
+    assert page.locator('[data-recordings-toggle]').is_visible()
+    assert page.frame_locator('.lv-workspace-frame').get_by_alt_text('Speakr 開源專案 Logo').is_visible()
+    _check_common(page, problems, 'project links and credits')

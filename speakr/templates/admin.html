@@ -140,7 +140,8 @@
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-2') }}">
+    {% if embedded_page|default(false) %}<script src="{{ url_for('static', filename='js/workspace-page.js', v='workspace-2') }}" defer></script>{% endif %}
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-full flex flex-col overflow-hidden">
     {% set page_label = ('Team Management' if is_team_admin and not current_user.is_admin else 'Admin') %}

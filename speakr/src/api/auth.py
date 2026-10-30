@@ -17,6 +17,7 @@ from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationE
 from werkzeug.security import generate_password_hash, check_password_hash
 import markdown
 
+from src.utils.workspace import render_workspace_page
 from src.database import db
 from src.models import User, SystemSetting, GroupMembership
 from src.utils import password_check, is_safe_url
@@ -910,7 +911,7 @@ def account():
     from src.services.inquire_agent import get_availability as _get_inquire_availability
     _inquire_availability = _get_inquire_availability(current_user)
 
-    return render_template('account.html',
+    return render_workspace_page('account.html',
                            title='Account',
                            storage_usage=_storage_usage(current_user),
                            usage_limits=_usage_limits(current_user),

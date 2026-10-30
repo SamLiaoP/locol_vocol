@@ -1,3 +1,4 @@
+{% set workspace_shell = true %}
 <!DOCTYPE html>
 <html lang="zh-Hant" class="h-full">
 <head>
@@ -72,7 +73,7 @@
          <head> so that, as with the former runtime build, they follow the page's
          own stylesheets in the cascade. -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css', v='orange-20261030-1') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/locol.css', v='workspace-20261030-2') }}">
     <!-- Scripts after every stylesheet, so that no page is painted while a
          script blocks the parser before the stylesheets are known. -->
     {% include 'includes/loading_overlay.html' %}
@@ -117,11 +118,17 @@
                 <!-- Custom Banner -->
                 {% include 'components/banner.html' %}
 
+                <section v-if="workspacePage !== 'recordings'" class="lv-workspace-page" :aria-label="workspacePageLabel">
+                    <div v-if="workspaceLoading" class="lv-workspace-loading" role="status">載入中…</div>
+                    <iframe ref="workspaceFrame" :key="workspacePage" :src="workspaceFrameUrl" :title="workspacePageLabel" @load="workspaceLoading = false" class="lv-workspace-frame"></iframe>
+                </section>
+                <div v-show="workspacePage === 'recordings'" class="lv-recording-surface">
                 <!-- Recording View -->
                 {% include 'components/recording-view.html' %}
 
                 <!-- Detail View -->
                 {% include 'components/detail-view.html' %}
+                </div>
             </main>
         </div>
 
@@ -223,6 +230,6 @@
     <script src="{{ url_for('static', filename='js/organizer-modals.js') }}"></script>
 
     <!-- Vue.js Application Script -->
-    <script type="module" src="{{ url_for('static', filename='js/app.modular.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/app.modular.js', v='workspace-2') }}"></script>
 </body>
 </html>

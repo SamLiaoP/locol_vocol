@@ -19,6 +19,8 @@
 
 介面以 PlaylistBridge／Songferry 的留白與工作區排版為基礎，採用奶油白與暖橘色配色。頁首可一鍵切換明亮／深色模式，選擇會保存在瀏覽器，並支援手機版。共用外觀集中在 `speakr/static/css/locol.css`，語意色彩變數在 `styles.css`；全站使用 Locol-Vocol 文字品牌，Speakr Logo 與來源授權保留於 `/references`。
 
+登入後各頁共用固定頁首與錄音紀錄側欄；錄音、人物、設定及參考與致謝在同一工作區內切換，支援瀏覽器上一頁／下一頁。錄音首頁僅保留「帶入你的錄音」入口與音波圖，人物功能可從頁首進入。設定的關於頁連至本專案 GitHub 與 README。
+
 ## 啟動
 
 ```bash

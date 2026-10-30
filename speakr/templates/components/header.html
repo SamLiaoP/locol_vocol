@@ -1,7 +1,7 @@
 <!-- Consistent workspace navigation across the library and recording pages. -->
 <header class="lv-header border-b border-[var(--border-primary)] flex items-center justify-between flex-shrink-0 z-50">
     <div class="flex items-center min-w-0">
-        <button @click="toggleSidebar" class="btn btn--icon header-action flex-shrink-0" :title="isSidebarCollapsed ? t('tooltips.showSidebar') : t('tooltips.hideSidebar')" :aria-label="isSidebarCollapsed ? t('tooltips.showSidebar') : t('tooltips.hideSidebar')"><i class="fas fa-bars" aria-hidden="true"></i></button>
+        <button data-recordings-toggle @click="toggleSidebar" class="btn btn--icon header-action flex-shrink-0" :title="isSidebarCollapsed ? t('tooltips.showSidebar') : t('tooltips.hideSidebar')" :aria-label="isSidebarCollapsed ? t('tooltips.showSidebar') : t('tooltips.hideSidebar')"><i class="fas fa-bars" aria-hidden="true"></i></button>
         {% include 'components/wordmark.html' %}
         {% include 'components/workspace-nav.html' %}
     </div>

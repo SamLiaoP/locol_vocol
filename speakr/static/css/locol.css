@@ -222,3 +222,11 @@ button:disabled { cursor: not-allowed; }
 .lv-workspace-features { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin: 20px 0 0; padding: 0; list-style: none; color: var(--text-secondary); font-size: 11px; }
 .lv-workspace-features li { display: inline-flex; align-items: center; gap: 6px; }
 .lv-workspace-features li::before { content: ''; width: 4px; height: 4px; background: var(--text-accent); border-radius: 50%; }
+.lv-recording-surface { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+.lv-workspace-page { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--bg-primary); }
+.lv-workspace-frame { display: block; width: 100%; height: 100%; flex: 1; border: 0; min-height: 0; }
+.lv-workspace-loading { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: var(--bg-primary); color: var(--text-muted); font-size: 13px; }
+html.lv-embedded body > header, html.lv-embedded body > #global-header { display: none !important; }
+html.lv-embedded .lv-settings, html.lv-embedded .lv-admin { padding-top: 18px; }
+.lv-start-grid--single { grid-template-columns: minmax(0, 1fr); }
+.lv-start-grid--single .lv-start-card { align-items: center; }
